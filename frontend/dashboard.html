@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clothing | Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    // Auth Check
+    fetch("../backend/check_auth.php")
+    .then(res => res.text())
+    .then(data => {
+        if (data.trim() === "not_logged_in") window.location.href = "login.html";
+    });
+    </script>
+</head>
+<body class="dashboard-body">
+
+<div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar-new">
+        <div class="sidebar-header">
+            <div class="logo-circle"><i class="fas fa-tshirt"></i></div>
+            <span class="logo-text">Clothing</span>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <button onclick="showSection('new')" id="nav-new" class="nav-item active">
+                <i class="fas fa-plus"></i> <span>New Work</span>
+            </button>
+            <button onclick="showSection('search')" id="nav-search" class="nav-item">
+                <i class="fas fa-search"></i> <span>Search</span>
+            </button>
+            <button onclick="showSection('edit')" id="nav-edit" class="nav-item">
+                <i class="fas fa-edit"></i> <span>Edit</span>
+            </button>
+            <button onclick="logout()" class="nav-item logout-item">
+                <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+            </button>
+        </nav>
+    </aside>
+
+    <!-- Main View -->
+    <main class="main-view">
+        <header class="top-header">
+            <div class="header-user">
+                <div class="avatar">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=4e73df&color=fff" alt="Admin">
+                </div>
+                <div class="user-info">
+                    <h1>Welcome back, Admin 👋</h1>
+                    <p>Manage your orders today</p>
+                </div>
+            </div>
+            
+            <div class="header-search">
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="Search orders..." onkeyup="searchWork()">
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <section class="dashboard-grid stats-row">
+            <div class="glass-card stat-box">
+                <div class="stat-icon-wrap orders"><i class="fas fa-shopping-bag"></i></div>
+                <div class="stat-content">
+                    <span class="stat-label">Total Orders</span>
+                    <h2 id="total">0</h2>
+                </div>
+            </div>
+            <div class="glass-card stat-box">
+                <div class="stat-icon-wrap pending"><i class="far fa-clock"></i></div>
+                <div class="stat-content">
+                    <span class="stat-label">Pending</span>
+                    <h2 id="pending">0</h2>
+                </div>
+            </div>
+            <div class="glass-card stat-box">
+                <div class="stat-icon-wrap done"><i class="far fa-check-circle"></i></div>
+                <div class="stat-content">
+                    <span class="stat-label">Completed</span>
+                    <h2 id="done">0</h2>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts & Form Section -->
+        <div class="dashboard-grid middle-row">
+            <!-- Left: Trends Chart -->
+            <div class="glass-card chart-card trends">
+                <div class="card-header">
+                    <h3>Work Order Trends</h3>
+                    <div class="time-filter">
+                        <select id="timeRangeSelect" onchange="loadTable()">
+                            <option value="today">Today</option>
+                            <option value="7days" selected>Past 7 Days</option>
+                            <option value="30days">Past 30 Days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="trendsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Right: Status Doughnut -->
+            <div class="glass-card chart-card status-doughnut">
+                <div class="card-header">
+                    <h3>Order Status</h3>
+                    <i class="fas fa-ellipsis-h"></i>
+                </div>
+                <div class="donut-container">
+                    <canvas id="statusChart"></canvas>
+                    <div class="donut-info">
+                        <span id="pendingPercent">0%</span>
+                        <p>Pending</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid bottom-row">
+            <!-- Table Section -->
+            <div class="glass-card table-card">
+                <div class="card-header">
+                    <h3>Recent Work Orders</h3>
+                    <div class="table-tools">
+                        <i class="fas fa-filter"></i>
+                        <i class="fas fa-download"></i>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Item</th>
+                                <th>Deadline</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Form Section -->
+            <div class="glass-card form-card">
+                <!-- New Work Form -->
+                <div id="newForm" class="form-container-active">
+                    <div class="form-header">
+                        <h3>New Work Order</h3>
+                    </div>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label>Customer Name</label>
+                            <input type="text" id="name" placeholder="Arjun Kumar">
+                        </div>
+                        <div class="input-group">
+                            <label>Phone Number</label>
+                            <input type="text" id="phone" placeholder="9976543210">
+                        </div>
+                        <div class="input-group">
+                            <label>Item Type</label>
+                            <input type="text" id="item" placeholder="Shirt/Pant/Dress">
+                        </div>
+                        <div class="input-group">
+                            <label>Deadline Date</label>
+                            <input type="date" id="deadline">
+                        </div>
+                        <div class="input-group full-width">
+                            <label>Measurements</label>
+                            <textarea id="measurements" placeholder="L: 40, W: 32..."></textarea>
+                        </div>
+                        <div class="input-group full-width">
+                            <label>Notes</label>
+                            <textarea id="notes" placeholder="Additional details..."></textarea>
+                        </div>
+                    </div>
+                    <button class="primary-btn" onclick="addWork()">
+                        <span>Save Work Order</span>
+                    </button>
+                </div>
+
+                <!-- Edit Work Form -->
+                <div id="editForm" style="display:none;">
+                    <div class="form-header">
+                        <h3>Edit Order #<span id="display_id"></span></h3>
+                    </div>
+                    <input type="hidden" id="edit_id">
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label>Customer Name</label>
+                            <input type="text" id="edit_name">
+                        </div>
+                        <div class="input-group">
+                            <label>Phone Number</label>
+                            <input type="text" id="edit_phone">
+                        </div>
+                        <div class="input-group">
+                            <label>Item Type</label>
+                            <input type="text" id="edit_item">
+                        </div>
+                        <div class="input-group">
+                            <label>Deadline Date</label>
+                            <input type="date" id="edit_deadline">
+                        </div>
+                        <div class="input-group">
+                            <label>Order Status</label>
+                            <select id="edit_status">
+                                <option value="Pending">Pending</option>
+                                <option value="Done">Done</option>
+                            </select>
+                        </div>
+                        <div class="input-group full-width">
+                            <label>Measurements</label>
+                            <textarea id="edit_measurements"></textarea>
+                        </div>
+                        <div class="input-group full-width">
+                            <label>Notes</label>
+                            <textarea id="edit_notes"></textarea>
+                        </div>
+                    </div>
+                    <div class="btn-row">
+                        <button class="primary-btn" onclick="updateWork()">Update Order</button>
+                        <button class="secondary-btn" onclick="showSection('new')">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

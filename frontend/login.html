@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Clothing System</title>
+    <!-- Google Fonts for professional look -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="login-body">
+
+    <!-- Split Screen Login Page -->
+    <div class="login-page-container">
+        
+        <!-- Left Side: Login/Register Form -->
+        <div class="login-left">
+            
+            <!-- Login Form Container -->
+            <div id="loginSection" class="login-form-wrapper">
+                <h1 class="welcome-text">Welcome Back!</h1>
+                <p class="signin-subtext">Please sign in to your account</p>
+
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password">
+                </div>
+
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox"> Remember Me
+                    </label>
+                    <a href="#" class="forgot-password" onclick="socialAlert('Password recovery')">Forgot Password?</a>
+                </div>
+
+                <button class="btn-login" onclick="login()">Login</button>
+
+                <p id="error" class="error-msg"></p>
+
+                <p class="register-link">Don't have an account? <a href="javascript:void(0)" onclick="toggleAuth('register')">Register Now</a></p>
+            </div>
+
+            <!-- Register Form Container (Hidden by default) -->
+            <div id="registerSection" class="login-form-wrapper" style="display: none;">
+                <h1 class="welcome-text">Create Account</h1>
+                <p class="signin-subtext">Join our clothing system today</p>
+
+                <div class="form-group">
+                    <label for="reg_username">Username</label>
+                    <input type="text" id="reg_username" placeholder="Choose a username">
+                </div>
+
+                <div class="form-group">
+                    <label for="reg_password">Password</label>
+                    <input type="password" id="reg_password" placeholder="Create a password">
+                </div>
+
+                <button class="btn-login" onclick="register()">Create Account</button>
+
+                <p id="reg_error" class="error-msg"></p>
+
+                <p class="register-link">Already have an account? <a href="javascript:void(0)" onclick="toggleAuth('login')">Login here</a></p>
+            </div>
+
+        </div>
+
+        <!-- Right Side: Decorative Image Section -->
+        <div class="login-right">
+            <div class="right-content">
+                <!-- Branding or decorative image -->
+                <img src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" alt="Fashion Background">
+                <div class="overlay-branding">
+                    <h2 class="brand-name">Clothing System</h2>
+                    <p class="brand-tagline">Excellence in every stitch.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Core Logic Reference -->
+    <script src="script.js"></script>
+</body>
+</html>
