@@ -65,13 +65,13 @@ $sql = "
     FROM header_infor h
     LEFT JOIN product_information p ON p.work_order = h.work_order
     LEFT JOIN (
-        SELECT product_id, SUM(received_qty) as total_received
-        FROM receiving_log 
+        SELECT product_id, SUM(qty) as total_received
+        FROM receivings 
         GROUP BY product_id
     ) r ON r.product_id = p.id
     LEFT JOIN (
-        SELECT product_id, SUM(issued_qty) as total_issued 
-        FROM issuing_log 
+        SELECT product_id, SUM(qty) as total_issued 
+        FROM issues 
         GROUP BY product_id
     ) i ON i.product_id = p.id
     WHERE h.work_date >= ?

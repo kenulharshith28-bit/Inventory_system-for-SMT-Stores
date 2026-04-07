@@ -18,7 +18,7 @@ try {
         SELECT 
             p.id, p.item, p.colour, p.size, p.mr_qty, p.work_order,
             COALESCE((SELECT SUM(qty) FROM receivings WHERE product_id = p.id), 0) as total_received,
-            COALESCE((SELECT SUM(qty) FROM issuing WHERE product_id = p.id), 0) as total_issued
+            COALESCE((SELECT SUM(qty) FROM issues WHERE product_id = p.id), 0) as total_issued
         FROM product_information p
         WHERE p.id = ?
     ");
@@ -45,7 +45,7 @@ try {
     $receivingStmt->execute();
     $receivingHistory = $receivingStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-    $issuingStmt = $conn->prepare("SELECT qty as issued_qty, date as issued_date, note as issued_notes FROM issuing WHERE product_id = ? ORDER BY date DESC");
+    $issuingStmt = $conn->prepare("SELECT qty as issued_qty, date as issued_date, note as issued_notes FROM issues WHERE product_id = ? ORDER BY date DESC");
     $issuingStmt->bind_param("i", $productId);
     $issuingStmt->execute();
     $issuingHistory = $issuingStmt->get_result()->fetch_all(MYSQLI_ASSOC);

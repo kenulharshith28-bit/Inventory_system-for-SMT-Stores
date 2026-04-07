@@ -23,12 +23,12 @@ try {
             p.size,
             p.unit,
             p.mr_qty,
-            COALESCE(SUM(CASE WHEN r.id IS NOT NULL THEN r.received_qty ELSE 0 END), 0) as total_received,
-            COALESCE(SUM(CASE WHEN i.id IS NOT NULL THEN i.issued_qty ELSE 0 END), 0) as total_issued
+            COALESCE(SUM(CASE WHEN r.id IS NOT NULL THEN r.qty ELSE 0 END), 0) as total_received,
+            COALESCE(SUM(CASE WHEN i.id IS NOT NULL THEN i.qty ELSE 0 END), 0) as total_issued
         FROM header_infor h
         LEFT JOIN product_information p ON p.work_order = h.work_order
-        LEFT JOIN receiving_log r ON r.product_id = p.id
-        LEFT JOIN issuing_log i ON i.product_id = p.id
+        LEFT JOIN receivings r ON r.product_id = p.id
+        LEFT JOIN issues i ON i.product_id = p.id
         GROUP BY h.id, p.id
         ORDER BY h.id DESC
     ";

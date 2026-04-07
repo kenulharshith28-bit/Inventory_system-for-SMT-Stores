@@ -21,8 +21,8 @@ try {
     $stmt = $conn->prepare("
         SELECT 
             p.mr_qty,
-            COALESCE((SELECT SUM(received_qty) FROM receiving_log WHERE product_id = p.id), 0) as total_received,
-            COALESCE((SELECT SUM(issued_qty) FROM issuing_log WHERE product_id = p.id), 0) as total_issued
+            COALESCE((SELECT SUM(qty) FROM receivings WHERE product_id = p.id), 0) as total_received,
+            COALESCE((SELECT SUM(qty) FROM issues WHERE product_id = p.id), 0) as total_issued
         FROM product_information p
         WHERE p.id = ?
     ");
@@ -48,10 +48,10 @@ try {
 
     // 3. Insert issuing record
     $insertStmt = $conn->prepare("
-        INSERT INTO issuing_log (work_order, product_id, issued_qty, issued_date, issued_notes)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO issues (product_id, qty, date, note)
+        VALUES (?, ?, ?, ?)
     ");
-    $insertStmt->bind_param("siids", $workOrder, $productId, $issuedQty, $issuedDate, $issuedNotes);
+    $insertStmt->bind_param("iiss", $productId, $issuedQty, $issuedDate, $issuedNotes);
     
     if ($insertStmt->execute()) {
         // 4. Status Automation Logic
@@ -84,13 +84,13 @@ function updateWorkOrderStatus($conn, $workOrder) {
     $stmt = $conn->prepare("
         SELECT 
             SUM(p.mr_qty) as total_mr_qty,
-            COALESCE((SELECT SUM(rl.received_qty) FROM receiving_log rl WHERE rl.work_order = p.work_order), 0) as total_received,
-            COALESCE((SELECT SUM(il.issued_qty) FROM issuing_log il WHERE il.work_order = p.work_order), 0) as total_issued
+            COALESCE((SELECT SUM(rl.qty) FROM receivings rl JOIN product_information p2 ON rl.product_id = p2.id WHERE p2.work_order = ?), 0) as total_received,
+            COALESCE((SELECT SUM(il.qty) FROM issues il JOIN product_information p3 ON il.product_id = p3.id WHERE p3.work_order = ?), 0) as total_issued
         FROM product_information p
         WHERE p.work_order = ?
         GROUP BY p.work_order
     ");
-    $stmt->bind_param("s", $workOrder);
+    $stmt->bind_param("sss", $workOrder, $workOrder, $workOrder);
     $stmt->execute();
     $totals = $stmt->get_result()->fetch_assoc();
 
