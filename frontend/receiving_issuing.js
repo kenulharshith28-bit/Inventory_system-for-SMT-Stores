@@ -214,22 +214,76 @@ function loadProductDetails() {
         .catch(err => console.error('Error loading product details:', err));
 }
 
+/**
+ * Format date from database (YYYY-MM-DD) to readable format
+ */
+function formatDate(dateStr) {
+    if (!dateStr || dateStr === '0000-00-00' || dateStr === '0000-00-00 00:00:00') {
+        return '<small style="color:#cbd5e1">No date</small>';
+    }
+    try {
+        const date = new Date(dateStr + 'T00:00:00');
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (e) {
+        return dateStr;
+    }
+}
+
 // Display receiving history
 function displayReceivingHistory(history) {
     const historyDiv = document.getElementById('receivingHistory');
     const historyList = document.getElementById('receivingHistoryList');
 
-    historyList.innerHTML = '';
+    historyList.innerHTML = `
+        <div style="
+            display: grid;
+            grid-template-columns: 100px 1fr 130px;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            color: #334155;
+            border-radius: 8px 8px 0 0;
+        ">
+            <span>Count</span>
+            <span>Note</span>
+            <span style="text-align:right;">Date</span>
+        </div>
+    `;
+
     history.forEach(item => {
         const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        historyItem.innerHTML = `
-            <div class="history-item-header">
-                <span class="history-item-qty">${item.received_qty} units</span>
-                <span class="history-item-date">${item.received_date}</span>
-            </div>
-            ${item.received_notes ? `<div class="history-item-notes">${item.received_notes}</div>` : ''}
+        historyItem.style.cssText = `
+            display: grid;
+            grid-template-columns: 100px 1fr 130px;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f1f5f9;
+            align-items: center;
         `;
+
+        const noteText = item.received_notes && item.received_notes.trim() 
+            ? item.received_notes 
+            : '<small style="color:#cbd5e1">No note</small>';
+        const dateText = formatDate(item.received_date);
+
+        historyItem.innerHTML = `
+            <span style="font-weight: 600; color: #0f172a;">
+                ${item.received_qty} units
+            </span>
+            <span style="color: #64748b; font-size: 0.9rem;">
+                ${noteText}
+            </span>
+            <span style="text-align: right; color: #94a3b8; font-size: 0.85rem;">
+                ${dateText}
+            </span>
+        `;
+
         historyList.appendChild(historyItem);
     });
 
@@ -241,33 +295,148 @@ function displayIssuingHistory(history) {
     const historyDiv = document.getElementById('issuingHistory');
     const historyList = document.getElementById('issuingHistoryList');
 
-    historyList.innerHTML = '';
+    historyList.innerHTML = `
+        <div style="
+            display: grid;
+            grid-template-columns: 100px 1fr 130px;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            color: #334155;
+            border-radius: 8px 8px 0 0;
+        ">
+            <span>Count</span>
+            <span>Note</span>
+            <span style="text-align:right;">Date</span>
+        </div>
+    `;
+
     history.forEach(item => {
         const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        historyItem.innerHTML = `
-            <div class="history-item-header">
-                <span class="history-item-qty">${item.issued_qty} units</span>
-                <span class="history-item-date">${item.issued_date}</span>
-            </div>
-            ${item.issued_notes ? `<div class="history-item-notes">${item.issued_notes}</div>` : ''}
+        historyItem.style.cssText = `
+            display: grid;
+            grid-template-columns: 100px 1fr 130px;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f1f5f9;
+            align-items: center;
         `;
+
+        const noteText = item.issued_notes && item.issued_notes.trim() 
+            ? item.issued_notes 
+            : '<small style="color:#cbd5e1">No note</small>';
+        const dateText = formatDate(item.issued_date);
+
+        historyItem.innerHTML = `
+            <span style="font-weight: 600; color: #0f172a;">
+                ${item.issued_qty} units
+            </span>
+            <span style="color: #64748b; font-size: 0.9rem;">
+                ${noteText}
+            </span>
+            <span style="text-align: right; color: #94a3b8; font-size: 0.85rem;">
+                ${dateText}
+            </span>
+        `;
+
         historyList.appendChild(historyItem);
     });
 
     historyDiv.style.display = 'block';
 }
 
-// Add receiving record
-function addReceivingRecord() {
-    const qty = parseInt(document.getElementById('receiving_qty').value);
-    const date = document.getElementById('receiving_date').value;
-    const notes = document.getElementById('receiving_notes').value;
+/**
+ * Show professional notification
+ */
+function showNotification(type, message) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 500;
+        z-index: 10000;
+        animation: notify-in 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        max-width: 400px;
+        word-wrap: break-word;
+        font-family: 'Poppins', sans-serif;
+    `;
 
-    if (!currentProduct || !qty || qty <= 0 || !date) {
-        alert('Please fill in all required fields');
+    if (type === 'success') {
+        notification.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        notification.style.color = 'white';
+        notification.style.borderLeft = '4px solid #047857';
+    } else if (type === 'error') {
+        notification.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+        notification.style.color = 'white';
+        notification.style.borderLeft = '4px solid #991b1b';
+    } else if (type === 'warning') {
+        notification.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+        notification.style.color = 'white';
+        notification.style.borderLeft = '4px solid #b45309';
+    } else {
+        notification.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+        notification.style.color = 'white';
+        notification.style.borderLeft = '4px solid #1e40af';
+    }
+
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'notify-out 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 3500);
+}
+
+// Add CSS for notifications if not already added
+if (!document.querySelector('style[data-notify-css]')) {
+    const style = document.createElement('style');
+    style.setAttribute('data-notify-css', 'true');
+    style.textContent = `
+        @keyframes notify-in {
+            from { opacity: 0; transform: translateX(400px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes notify-out {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(400px); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Add receiving record
+function addReceivingRecord(isForced = false) {
+    const qty = parseInt(document.getElementById('receiving_qty').value) || 0;
+    const date = document.getElementById('receiving_date').value;
+    const notes = document.getElementById('receiving_notes').value.trim();
+
+    // Validation
+    if (!currentProduct || !currentProduct.product_id) {
+        showNotification('error', '✗ Please select a product first');
         return;
     }
+
+    if (!qty || qty <= 0) {
+        showNotification('error', '✗ Please enter a valid quantity');
+        return;
+    }
+
+    if (!date) {
+        showNotification('error', '✗ Please select a date');
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick^="addReceivingRecord"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
 
     const params = new URLSearchParams();
     params.append('work_order', currentProduct.work_order);
@@ -275,6 +444,7 @@ function addReceivingRecord() {
     params.append('received_qty', qty);
     params.append('received_date', date);
     params.append('received_notes', notes);
+    if (isForced) params.append('force', 'true');
 
     fetch('../backend/add_receiving.php', {
         method: 'POST',
@@ -283,31 +453,65 @@ function addReceivingRecord() {
     })
         .then(res => res.json())
         .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+
             if (data.success) {
-                alert('Receiving record added successfully');
+                showNotification('success', '✓ Receiving record added successfully!');
+                
                 // Clear form
                 document.getElementById('receiving_qty').value = '';
                 document.getElementById('receiving_notes').value = '';
+                document.getElementById('receiving_date').value = new Date().toISOString().split('T')[0];
+                
                 // Reload product details
-                loadProductDetails();
+                setTimeout(() => loadProductDetails(), 300);
+                
                 // Reload incomplete work orders
                 loadIncompleteWorkOrders();
+            } else if (data.error === 'OVER_LIMIT') {
+                if (confirm(data.message + "\n\nDo you want to proceed anyway?")) {
+                    addReceivingRecord(true); // Recursive call with force=true
+                }
             } else {
-                alert('Error: ' + data.error);
+                showNotification('error', '✗ ' + (data.error || 'Failed to add receiving record'));
             }
         })
-        .catch(err => console.error('Error adding receiving:', err));
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            console.error('Error adding receiving:', err);
+            showNotification('error', '✗ Network error: ' + err.message);
+        });
 }
 
 // Add issuing record
 function addIssuingRecord() {
-    const qty = parseInt(document.getElementById('issuing_qty').value);
+    const qty = parseInt(document.getElementById('issuing_qty').value) || 0;
     const date = document.getElementById('issuing_date').value;
-    const notes = document.getElementById('issuing_notes').value;
+    const notes = document.getElementById('issuing_notes').value.trim();
 
-    if (!currentProduct || !qty || qty <= 0 || !date) {
-        alert('Please fill in all required fields');
+    // Validation
+    if (!currentProduct || !currentProduct.product_id) {
+        showNotification('error', '✗ Please select a product first');
         return;
+    }
+
+    if (!qty || qty <= 0) {
+        showNotification('error', '✗ Please enter a valid quantity');
+        return;
+    }
+
+    if (!date) {
+        showNotification('error', '✗ Please select a date');
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick^="addIssuingRecord"]');
+    const originalText = btn ? btn.innerHTML : 'Issue Items';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     }
 
     const params = new URLSearchParams();
@@ -324,20 +528,41 @@ function addIssuingRecord() {
     })
         .then(res => res.json())
         .then(data => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+
             if (data.success) {
-                alert('Issuing record added successfully');
+                // Check if there's a warning about insufficient stock
+                if (data.warning) {
+                    showNotification('warning', '⚠ ' + data.warning_message);
+                } else {
+                    showNotification('success', '✓ Issuing record added successfully!');
+                }
+                
                 // Clear form
                 document.getElementById('issuing_qty').value = '';
                 document.getElementById('issuing_notes').value = '';
+                document.getElementById('issuing_date').value = new Date().toISOString().split('T')[0];
+                
                 // Reload product details
-                loadProductDetails();
+                setTimeout(() => loadProductDetails(), 300);
+                
                 // Reload incomplete work orders
                 loadIncompleteWorkOrders();
             } else {
-                alert('Error: ' + data.error);
+                showNotification('error', '✗ ' + (data.error || 'Failed to add issuing record'));
             }
         })
-        .catch(err => console.error('Error adding issuing:', err));
+        .catch(err => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+            console.error('Error adding issuing:', err);
+            showNotification('error', '✗ Network error: ' + err.message);
+        });
 }
 
 // Show shortage alert

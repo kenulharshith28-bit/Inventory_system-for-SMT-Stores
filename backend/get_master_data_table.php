@@ -1,5 +1,13 @@
 <?php
+session_start();
 include "db.php";
+
+// Admin check
+if (!isset($_SESSION['user']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Unauthorized access']);
+    exit;
+}
 
 // Get all master data with full details (id, type, value, created_at)
 $stmt = $conn->prepare("

@@ -1,6 +1,6 @@
 <?php
 /**
- * Add Receiving Record with Validation and Status Automation
+ * Add Receiving Record - Permissive with Validation
  */
 header('Content-Type: application/json');
 include "db.php";
@@ -10,6 +10,7 @@ $productId = $_POST['product_id'] ?? '';
 $receivedQty = intval($_POST['received_qty'] ?? 0);
 $receivedDate = $_POST['received_date'] ?? date('Y-m-d');
 $receivedNotes = $_POST['received_notes'] ?? '';
+$force = $_POST['force'] ?? 'false'; 
 
 if (!$workOrder || !$productId || $receivedQty <= 0) {
     echo json_encode(['success' => false, 'error' => 'Missing required fields or invalid quantity']);
@@ -37,11 +38,14 @@ try {
     $mrQty = intval($productData['mr_qty']);
     $totalReceived = intval($productData['total_received']);
 
-    // 2. Validate: Over receiving check
-    if ($totalReceived + $receivedQty > $mrQty) {
+    // 2. Logic: Check for over receiving but ALLOW if confirmed (force=true)
+    if ($totalReceived + $receivedQty > $mrQty && $force !== 'true') {
         echo json_encode([
             'success' => false, 
-            'error' => "Over receiving: Current total ($totalReceived) + new ($receivedQty) exceeds MR Qty ($mrQty)"
+            'error' => 'OVER_LIMIT',
+            'message' => "Warning: Adding $receivedQty will exceed MR Qty ($mrQty). Current total is $totalReceived.",
+            'limit' => $mrQty,
+            'current' => $totalReceived
         ]);
         exit;
     }
@@ -54,7 +58,6 @@ try {
     $insertStmt->bind_param("siids", $workOrder, $productId, $receivedQty, $receivedDate, $receivedNotes);
     
     if ($insertStmt->execute()) {
-        // 4. Update Status Automation Logic
         updateWorkOrderStatus($conn, $workOrder);
 
         echo json_encode([
@@ -70,16 +73,12 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
-/**
- * Update Work Order Status based on Issuing/Receiving
- */
 function updateWorkOrderStatus($conn, $workOrder) {
-    // Get aggregated totals for the entire Work Order
     $stmt = $conn->prepare("
         SELECT 
             SUM(p.mr_qty) as total_mr_qty,
-            COALESCE((SELECT SUM(received_qty) FROM receiving_log WHERE work_order = p.work_order), 0) as total_received,
-            COALESCE((SELECT SUM(issued_qty) FROM issuing_log WHERE work_order = p.work_order), 0) as total_issued
+            COALESCE((SELECT SUM(rl.received_qty) FROM receiving_log rl WHERE rl.work_order = p.work_order), 0) as total_received,
+            COALESCE((SELECT SUM(il.issued_qty) FROM issuing_log il WHERE il.work_order = p.work_order), 0) as total_issued
         FROM product_information p
         WHERE p.work_order = ?
         GROUP BY p.work_order
@@ -95,7 +94,7 @@ function updateWorkOrderStatus($conn, $workOrder) {
 
         $newStatus = 'created';
         if ($issued >= $mr && $mr > 0) {
-            $newStatus = 'done'; // mapped from 'completed' to match your existing enum
+            $newStatus = 'done'; 
         } elseif ($issued > 0) {
             $newStatus = 'issuing';
         } elseif ($received > 0) {

@@ -34,7 +34,7 @@ CREATE TABLE `header_infor` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `work_order` (`work_order`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -43,6 +43,7 @@ CREATE TABLE `header_infor` (
 
 LOCK TABLES `header_infor` WRITE;
 /*!40000 ALTER TABLE `header_infor` DISABLE KEYS */;
+INSERT INTO `header_infor` (`id`, `customer_name`, `work_order`, `mrn_no`, `cut_qty`, `location`, `work_date`, `status`, `created_at`) VALUES (1,'Polo','111111','11111',3100,'E/5/1','2026-04-06','created','2026-04-06 08:40:10');
 /*!40000 ALTER TABLE `header_infor` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -76,6 +77,39 @@ LOCK TABLES `issues` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `issuing_log`
+--
+
+DROP TABLE IF EXISTS `issuing_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `issuing_log` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `work_order` varchar(255) NOT NULL,
+  `product_id` int(11) DEFAULT NULL,
+  `issued_qty` int(11) NOT NULL,
+  `issued_date` date NOT NULL,
+  `issued_notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `product_id` (`product_id`),
+  KEY `idx_work_order` (`work_order`),
+  KEY `idx_issued_date` (`issued_date`),
+  CONSTRAINT `issuing_log_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `product_information` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `issuing_log`
+--
+
+LOCK TABLES `issuing_log` WRITE;
+/*!40000 ALTER TABLE `issuing_log` DISABLE KEYS */;
+INSERT INTO `issuing_log` (`id`, `work_order`, `product_id`, `issued_qty`, `issued_date`, `issued_notes`, `created_at`) VALUES (1,'111111',1,10,'0000-00-00','','2026-04-06 08:42:09');
+/*!40000 ALTER TABLE `issuing_log` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `master_data`
 --
 
@@ -88,7 +122,7 @@ CREATE TABLE `master_data` (
   `value` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -97,7 +131,7 @@ CREATE TABLE `master_data` (
 
 LOCK TABLES `master_data` WRITE;
 /*!40000 ALTER TABLE `master_data` DISABLE KEYS */;
-INSERT INTO `master_data` (`id`, `type`, `value`, `created_at`) VALUES (1,'customer','Nike','2026-04-06 02:21:00'),(2,'customer','Adidas','2026-04-06 02:21:00'),(3,'description','Urgent Order','2026-04-06 02:21:00'),(4,'description','Export Order','2026-04-06 02:21:00');
+INSERT INTO `master_data` (`id`, `type`, `value`, `created_at`) VALUES (3,'description','Urgent Order','2026-04-06 02:21:00'),(4,'description','Export Order','2026-04-06 02:21:00'),(5,'item','buttons','2026-04-06 08:36:20'),(6,'customer','Polo','2026-04-06 08:38:05'),(8,'size','XS','2026-04-07 02:50:13');
 /*!40000 ALTER TABLE `master_data` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -119,10 +153,11 @@ CREATE TABLE `product_information` (
   `mr_qty` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `ignored` tinyint(1) DEFAULT 0,
+  `shortage_ignored` tinyint(4) DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_work_order` (`work_order`),
   CONSTRAINT `product_information_ibfk_1` FOREIGN KEY (`work_order`) REFERENCES `header_infor` (`work_order`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -131,7 +166,41 @@ CREATE TABLE `product_information` (
 
 LOCK TABLES `product_information` WRITE;
 /*!40000 ALTER TABLE `product_information` DISABLE KEYS */;
+INSERT INTO `product_information` (`id`, `work_order`, `item_code`, `item`, `colour`, `size`, `unit`, `mr_qty`, `created_at`, `ignored`, `shortage_ignored`) VALUES (1,'111111','12','buttons','','xs','Pcs',100,'2026-04-06 08:40:10',0,0);
 /*!40000 ALTER TABLE `product_information` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `receiving_log`
+--
+
+DROP TABLE IF EXISTS `receiving_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `receiving_log` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `work_order` varchar(255) NOT NULL,
+  `product_id` int(11) DEFAULT NULL,
+  `received_qty` int(11) NOT NULL,
+  `received_date` date NOT NULL,
+  `received_notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `product_id` (`product_id`),
+  KEY `idx_work_order` (`work_order`),
+  KEY `idx_received_date` (`received_date`),
+  CONSTRAINT `receiving_log_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `product_information` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `receiving_log`
+--
+
+LOCK TABLES `receiving_log` WRITE;
+/*!40000 ALTER TABLE `receiving_log` DISABLE KEYS */;
+INSERT INTO `receiving_log` (`id`, `work_order`, `product_id`, `received_qty`, `received_date`, `received_notes`, `created_at`) VALUES (1,'111111',1,105,'0000-00-00','','2026-04-06 08:41:53'),(2,'111111',1,10,'0000-00-00','','2026-04-06 08:43:00'),(3,'111111',1,10,'0000-00-00','','2026-04-06 08:43:10');
+/*!40000 ALTER TABLE `receiving_log` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -174,6 +243,7 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `username` varchar(50) DEFAULT NULL,
   `password` varchar(255) DEFAULT NULL,
+  `role` varchar(20) DEFAULT 'user',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -184,7 +254,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` (`id`, `username`, `password`) VALUES (1,'admin','admin123'),(2,'sahanmi','1234'),(3,'admin2','1234');
+INSERT INTO `users` (`id`, `username`, `password`, `role`) VALUES (1,'admin','admin123','admin'),(2,'sahanmi','1234','user'),(3,'admin2','1234','user');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -197,4 +267,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-06  9:45:28
+-- Dump completed on 2026-04-07  9:35:45

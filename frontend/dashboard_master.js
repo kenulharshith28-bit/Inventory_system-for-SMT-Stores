@@ -381,51 +381,21 @@ function login() {
         });
 }
 
-function register() {
-    const user = document.getElementById("reg_username").value;
-    const pass = document.getElementById("reg_password").value;
-
-    if (!user || !pass) {
-        if (document.getElementById("reg_error")) {
-            document.getElementById("reg_error").innerText = "Please fill all fields";
-        }
-        return;
-    }
-
-    const params = new URLSearchParams();
-    params.append("username", user);
-    params.append("password", pass);
-
-    fetch("../backend/register.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString()
-    })
-        .then(res => res.text())
-        .then(data => {
-            data = data.trim();
-            if (data === "success") {
-                alert("Account created successfully. Please login.");
-                toggleAuth("login");
-            } else if (data === "exists") {
-                if (document.getElementById("reg_error")) {
-                    document.getElementById("reg_error").innerText = "Username already taken";
-                }
-            } else if (document.getElementById("reg_error")) {
-                document.getElementById("reg_error").innerText = "Registration failed. Try again.";
-            }
-        })
-        .catch(err => {
-            console.error("Registration error:", err);
-            if (document.getElementById("reg_error")) {
-                document.getElementById("reg_error").innerText = "Connection error. Please try again.";
-            }
-        });
-}
-
 function showSection(section) {
     console.log(`Showing section: ${section}`);
     
+    // Security check for master section
+    if (section === "master" && currentUser && currentUser.role !== 'admin') {
+        alert("Access Denied: Admin role required.");
+        section = "home";
+    }
+
+    // Security check for users section
+    if (section === "users" && currentUser && currentUser.role !== 'admin') {
+        alert("Access Denied: Admin role required.");
+        section = "home";
+    }
+
     document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
     document.querySelectorAll(".content-section").forEach(panel => panel.classList.add("content-hidden"));
 
@@ -450,6 +420,13 @@ function showSection(section) {
         document.getElementById("nav-receivingIssuing").classList.add("active");
         if (typeof initializeReceivingIssuing === "function") {
             initializeReceivingIssuing();
+        }
+    } else if (section === "users") {
+        document.getElementById("usersSection").classList.remove("content-hidden");
+        document.getElementById("nav-users").classList.add("active");
+        // Load users when section is opened
+        if (typeof loadUsers === "function") {
+            loadUsers();
         }
     }
 }
@@ -577,13 +554,48 @@ function renderTable(data) {
     data.forEach(row => {
         const tr = document.createElement("tr");
         const statusClass = normalizeStatus(row.status);
+        
+        // Shortage display logic
+        let shortageBadge = "";
+        const mrQty = parseInt(row.mr_qty) || 0;
+        const totalReceived = parseInt(row.total_received) || 0;
+        const totalIssued = parseInt(row.total_issued) || 0;
+
+        if (statusClass !== 'done') {
+            // 1. Check if receiving doesn't match MR Qty
+            if (totalReceived !== mrQty) {
+                const diff = mrQty - totalReceived;
+                const label = diff > 0 ? `Receiving Short: ${diff}` : `Over Received: ${Math.abs(diff)}`;
+                shortageBadge += `
+                    <div style="margin-top: 0.25rem; font-size: 0.75rem; color: #f6993f; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        ${label}
+                    </div>
+                `;
+            }
+
+            // 2. Check for issuing shortage
+            if (totalIssued < mrQty) {
+                const issueShortage = mrQty - totalIssued;
+                shortageBadge += `
+                    <div style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--danger); font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Issuing Short: ${issueShortage}
+                    </div>
+                `;
+            }
+        }
+
         tr.innerHTML = `
             <td style="font-family: monospace; font-weight: 600; color: #5a67d8;">${row.work_order || "-"}</td>
             <td style="font-weight: 500;">${row.customer_name || "-"}</td>
             <td>${row.item || "-"}</td>
             <td>${row.mrn_no || "-"}</td>
             <td style="font-family: monospace; font-weight: 500; color: #5a67d8;">${row.work_date || "No Date"}</td>
-            <td><span class="status-badge ${statusClass}">${toTitleStatus(row.status)}</span></td>
+            <td>
+                <span class="status-badge ${statusClass}">${toTitleStatus(row.status)}</span>
+                ${shortageBadge}
+            </td>
             <td>
                 <div style="display: flex; gap: 0.5rem;">
                     <button class="btn-icon" onclick="prepareEdit(${JSON.stringify(row).replace(/"/g, "&quot;")})" title="Edit Work Order">
@@ -840,4 +852,6 @@ function deleteMasterDataTableRow(id, type, value) {
     console.log(`Deleting from table: ID=${id}, Type=${type}, Value=${value}`);
     deleteMasterData(type, value);
 }
+
+// User Management Functions removed - handled by dashboard_users.js
 

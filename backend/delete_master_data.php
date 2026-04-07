@@ -1,5 +1,11 @@
 <?php
+session_start();
 include "db.php";
+
+// Admin check
+if (!isset($_SESSION['user']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    die("error: unauthorized access");
+}
 
 $type = strtolower(trim($_POST['type'] ?? ''));
 $value = trim($_POST['value'] ?? '');

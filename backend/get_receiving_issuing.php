@@ -17,8 +17,8 @@ try {
     $productStmt = $conn->prepare("
         SELECT 
             p.id, p.item, p.colour, p.size, p.mr_qty, p.work_order,
-            COALESCE((SELECT SUM(received_qty) FROM receiving_log WHERE product_id = p.id), 0) as total_received,
-            COALESCE((SELECT SUM(issued_qty) FROM issuing_log WHERE product_id = p.id), 0) as total_issued
+            COALESCE((SELECT SUM(qty) FROM receivings WHERE product_id = p.id), 0) as total_received,
+            COALESCE((SELECT SUM(qty) FROM issuing WHERE product_id = p.id), 0) as total_issued
         FROM product_information p
         WHERE p.id = ?
     ");
@@ -40,12 +40,12 @@ try {
     $mr_shortage = $mr_qty - $total_issued;
 
     // 3. Get History
-    $receivingStmt = $conn->prepare("SELECT received_qty, received_date, received_notes FROM receiving_log WHERE product_id = ? ORDER BY received_date DESC");
+    $receivingStmt = $conn->prepare("SELECT qty as received_qty, date as received_date, note as received_notes FROM receivings WHERE product_id = ? ORDER BY date DESC");
     $receivingStmt->bind_param("i", $productId);
     $receivingStmt->execute();
     $receivingHistory = $receivingStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-    $issuingStmt = $conn->prepare("SELECT issued_qty, issued_date, issued_notes FROM issuing_log WHERE product_id = ? ORDER BY issued_date DESC");
+    $issuingStmt = $conn->prepare("SELECT qty as issued_qty, date as issued_date, note as issued_notes FROM issuing WHERE product_id = ? ORDER BY date DESC");
     $issuingStmt->bind_param("i", $productId);
     $issuingStmt->execute();
     $issuingHistory = $issuingStmt->get_result()->fetch_all(MYSQLI_ASSOC);

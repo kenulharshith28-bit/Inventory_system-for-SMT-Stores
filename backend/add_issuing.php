@@ -38,13 +38,12 @@ try {
     $totalReceived = intval($productData['total_received']);
     $totalIssued = intval($productData['total_issued']);
 
-    // 2. Validate: Not enough stock check
+    // 2. Check if issuing would exceed available stock (but allow it with warning)
+    $hasWarning = false;
+    $warningMessage = '';
     if ($totalIssued + $issuedQty > $totalReceived) {
-        echo json_encode([
-            'success' => false, 
-            'error' => "Not enough stock: Available ($totalReceived), Already Issued ($totalIssued), Attempting to issue ($issuedQty)"
-        ]);
-        exit;
+        $hasWarning = true;
+        $warningMessage = "Warning: Issuing ($issuedQty) exceeds available stock (" . ($totalReceived - $totalIssued) . "). This will create a shortage.";
     }
 
     // 3. Insert issuing record
@@ -58,11 +57,18 @@ try {
         // 4. Status Automation Logic
         updateWorkOrderStatus($conn, $workOrder);
 
-        echo json_encode([
+        $response = [
             'success' => true,
             'message' => 'Issuing record added successfully',
             'new_total_issued' => $totalIssued + $issuedQty
-        ]);
+        ];
+        
+        if ($hasWarning) {
+            $response['warning'] = true;
+            $response['warning_message'] = $warningMessage;
+        }
+        
+        echo json_encode($response);
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to add issuing record']);
     }
@@ -78,8 +84,8 @@ function updateWorkOrderStatus($conn, $workOrder) {
     $stmt = $conn->prepare("
         SELECT 
             SUM(p.mr_qty) as total_mr_qty,
-            COALESCE((SELECT SUM(received_qty) FROM receiving_log WHERE work_order = p.work_order), 0) as total_received,
-            COALESCE((SELECT SUM(issued_qty) FROM issuing_log WHERE work_order = p.work_order), 0) as total_issued
+            COALESCE((SELECT SUM(rl.received_qty) FROM receiving_log rl WHERE rl.work_order = p.work_order), 0) as total_received,
+            COALESCE((SELECT SUM(il.issued_qty) FROM issuing_log il WHERE il.work_order = p.work_order), 0) as total_issued
         FROM product_information p
         WHERE p.work_order = ?
         GROUP BY p.work_order

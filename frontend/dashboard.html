@@ -9,11 +9,34 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+    // Global User State
+    let currentUser = null;
+
     // Auth Check
     fetch("../backend/check_auth.php")
-    .then(res => res.text())
+    .then(res => res.json())
     .then(data => {
-        if (data.trim() === "not_logged_in") window.location.href = "login.html";
+        if (data.status === "not_logged_in") {
+            window.location.href = "login.html";
+        } else {
+            currentUser = data;
+            document.getElementById('userNameDisplay').textContent = data.user;
+            document.getElementById('userRoleDisplay').textContent = data.role.charAt(0).toUpperCase() + data.role.slice(1);
+            
+    // Apply role-based visibility
+            if (data.role !== 'admin') {
+                // Hide Master Data Nav
+                const masterNav = document.getElementById('nav-master');
+                if (masterNav) masterNav.style.display = 'none';
+                
+                // Hide Users Nav
+                const usersNav = document.getElementById('nav-users');
+                if (usersNav) usersNav.style.display = 'none';
+                
+                // Redirect if trying to access master section via URL/State
+                if (window.location.hash === '#master') showSection('home');
+            }
+        }
     });
     </script>
 </head>
@@ -43,6 +66,9 @@
             <button onclick="showSection('receivingIssuing')" id="nav-receivingIssuing" class="nav-item">
                 <i class="fas fa-exchange-alt"></i> <span>Receive/Issue</span>
             </button>
+            <button onclick="showSection('users')" id="nav-users" class="nav-item">
+                <i class="fas fa-users"></i> <span>Users</span>
+            </button>
             <button onclick="logout()" class="nav-item logout-item">
                 <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
             </button>
@@ -57,8 +83,8 @@
                     <img src="https://ui-avatars.com/api/?name=Admin&background=4e73df&color=fff" alt="Admin">
                 </div>
                 <div class="user-info">
-                    <h1>Welcome back, Admin 👋</h1>
-                    <p>Manage your orders today</p>
+                    <h1>Welcome back, <span id="userNameDisplay">User</span> 👋</h1>
+                    <p id="userRoleDisplay">Role</p>
                 </div>
             </div>
             
@@ -733,11 +759,81 @@
             </div>
         </section>
 
+        <section id="usersSection" class="content-section content-hidden">
+            <div class="single-panel">
+                <div class="glass-card form-card">
+                    <div class="form-header">
+                        <h3><i class="fas fa-users" style="margin-right: 0.5rem;"></i>User Management</h3>
+                    </div>
+
+                    <!-- Create New User Form -->
+                    <div class="create-user-container">
+                        <div class="form-header" style="margin-top: 0;">
+                            <h4>Create New User Account</h4>
+                        </div>
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label>New Username</label>
+                                <input type="text" id="new_username" placeholder="Enter username" onkeydown="handleUserFormEnter(event)">
+                            </div>
+                            <div class="input-group">
+                                <label>New Password</label>
+                                <input type="password" id="new_password" placeholder="Min. 4 characters" onkeydown="handleUserFormEnter(event)">
+                            </div>
+                            <div class="input-group">
+                                <label>Assign Role</label>
+                                <select id="assign_role" onkeydown="handleUserFormEnter(event)">
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-actions" style="margin-top: 1rem;">
+                            <button class="primary-btn" onclick="createUser()">
+                                <i class="fas fa-user-plus"></i> <span>Create Account</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Users List Table -->
+                    <div class="users-list-container" style="margin-top: 2rem;">
+                        <div class="form-header">
+                            <h4>All Users</h4>
+                            <button class="secondary-btn" onclick="loadUsers()" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="users-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Username</th>
+                                        <th>Role</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody">
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; padding: 2rem; color: #999;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading users...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 </div>
 
 <script src="products-manager.js"></script>
 <script src="dashboard_master.js"></script>
+<script src="dashboard_users.js"></script>
 <script src="receiving_issuing.js"></script>
 <script src="autocomplete.js"></script>
 </body>

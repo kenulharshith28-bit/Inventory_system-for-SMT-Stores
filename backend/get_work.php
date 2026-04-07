@@ -1,6 +1,6 @@
 <?php
 /**
- * Get Work Orders - Filtered by range
+ * Get Work Orders - Filtered by range with Shortage Info
  */
 include "db.php";
 
@@ -59,9 +59,21 @@ $sql = "
         p.size,
         p.unit,
         p.mr_qty,
-        p.ignored
+        p.ignored,
+        COALESCE(r.total_received, 0) as total_received,
+        COALESCE(i.total_issued, 0) as total_issued
     FROM header_infor h
     LEFT JOIN product_information p ON p.work_order = h.work_order
+    LEFT JOIN (
+        SELECT product_id, SUM(received_qty) as total_received
+        FROM receiving_log 
+        GROUP BY product_id
+    ) r ON r.product_id = p.id
+    LEFT JOIN (
+        SELECT product_id, SUM(issued_qty) as total_issued 
+        FROM issuing_log 
+        GROUP BY product_id
+    ) i ON i.product_id = p.id
     WHERE h.work_date >= ?
     ORDER BY h.id DESC
 ";
@@ -76,7 +88,9 @@ while ($row = $result->fetch_assoc()) {
     $data[] = $row;
 }
 
+header('Content-Type: application/json');
 echo json_encode($data);
+
 $stmt->close();
 $conn->close();
 ?>

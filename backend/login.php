@@ -15,13 +15,16 @@ if (!$username || !$password) {
 }
 
 // Using prepared statements for security
-$stmt = $conn->prepare("SELECT id FROM users WHERE username = ? AND password = ?");
+// Fetch both user information and role
+$stmt = $conn->prepare("SELECT id, username, role FROM users WHERE username = ? AND password = ?");
 $stmt->bind_param("ss", $username, $password);
 $stmt->execute();
 $result = $stmt->get_result();
  
 if ($result->num_rows > 0) { 
-     $_SESSION['user'] = $username; 
+     $user_data = $result->fetch_assoc();
+     $_SESSION['user'] = $user_data['username']; 
+     $_SESSION['role'] = $user_data['role']; // Store role in session
      echo "success"; 
 } else { 
      echo "error"; 
@@ -29,4 +32,4 @@ if ($result->num_rows > 0) {
 
 $stmt->close();
 $conn->close();
-?>
+?> 
