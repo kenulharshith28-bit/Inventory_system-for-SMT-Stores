@@ -469,8 +469,8 @@ function addReceivingRecord(isForced = false) {
                 
                 // Reload incomplete work orders
                 loadIncompleteWorkOrders();
-            } else if (data.error === 'OVER_LIMIT') {
-                if (confirm(data.message + "\n\nDo you want to proceed anyway?")) {
+            } else if (data.error === 'MR_FULFILLED') {
+                if (confirm(data.message + "\n\nDo you want to proceed?")) {
                     addReceivingRecord(true); // Recursive call with force=true
                 }
             } else {
@@ -486,7 +486,7 @@ function addReceivingRecord(isForced = false) {
 }
 
 // Add issuing record
-function addIssuingRecord() {
+function addIssuingRecord(isForced = false) {
     const qty = parseInt(document.getElementById('issuing_qty').value) || 0;
     const date = document.getElementById('issuing_date').value;
     const notes = document.getElementById('issuing_notes').value.trim();
@@ -520,6 +520,7 @@ function addIssuingRecord() {
     params.append('issued_qty', qty);
     params.append('issued_date', date);
     params.append('issued_notes', notes);
+    if (isForced) params.append('force', 'true');
 
     fetch('../backend/add_issuing.php', {
         method: 'POST',
@@ -534,12 +535,7 @@ function addIssuingRecord() {
             }
 
             if (data.success) {
-                // Check if there's a warning about insufficient stock
-                if (data.warning) {
-                    showNotification('warning', '⚠ ' + data.warning_message);
-                } else {
-                    showNotification('success', '✓ Issuing record added successfully!');
-                }
+                showNotification('success', '✓ Issuing record added successfully!');
                 
                 // Clear form
                 document.getElementById('issuing_qty').value = '';
@@ -551,8 +547,13 @@ function addIssuingRecord() {
                 
                 // Reload incomplete work orders
                 loadIncompleteWorkOrders();
+            } else if (data.error === 'SHORTAGE_WARNING') {
+                // Handle shortage warning - ask user to confirm
+                if (confirm(data.message + "\n\nDo you want to proceed anyway?")) {
+                    addIssuingRecord(true); // Recursive call with force=true
+                }
             } else {
-                showNotification('error', '✗ ' + (data.error || 'Failed to add issuing record'));
+                showNotification('error', '✗ ' + (data.message || data.error || 'Failed to add issuing record'));
             }
         })
         .catch(err => {

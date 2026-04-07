@@ -10,6 +10,7 @@ $productId = $_POST['product_id'] ?? '';
 $issuedQty = intval($_POST['issued_qty'] ?? 0);
 $issuedDate = $_POST['issued_date'] ?? date('Y-m-d');
 $issuedNotes = $_POST['issued_notes'] ?? '';
+$force = $_POST['force'] ?? 'false';
 
 if (!$workOrder || !$productId || $issuedQty <= 0) {
     echo json_encode(['success' => false, 'error' => 'Missing required fields or invalid quantity']);
@@ -38,15 +39,27 @@ try {
     $totalReceived = intval($productData['total_received']);
     $totalIssued = intval($productData['total_issued']);
 
-    // 2. Check if issuing would exceed available stock (but allow it with warning)
+    // 2. Check if issuing would exceed received stock (WARNING condition)
     $hasWarning = false;
     $warningMessage = '';
-    if ($totalIssued + $issuedQty > $totalReceived) {
+    if ($totalIssued + $issuedQty > $totalReceived && $force !== 'true') {
+        $availableStock = $totalReceived - $totalIssued;
+        $shortageAmount = ($totalIssued + $issuedQty) - $totalReceived;
         $hasWarning = true;
-        $warningMessage = "Warning: Issuing ($issuedQty) exceeds available stock (" . ($totalReceived - $totalIssued) . "). This will create a shortage.";
+        $warningMessage = "⚠️ WARNING: Issuing $issuedQty will exceed received stock ($availableStock available). This will create a SHORTAGE of $shortageAmount units.";
+        
+        // Return warning and EXIT - do NOT save yet
+        echo json_encode([
+            'success' => false,
+            'error' => 'SHORTAGE_WARNING',
+            'message' => $warningMessage,
+            'available_stock' => $availableStock,
+            'shortage_amount' => $shortageAmount
+        ]);
+        exit;
     }
 
-    // 3. Insert issuing record
+    // 3. If force='true' OR no shortage warning: INSERT issuing record
     $insertStmt = $conn->prepare("
         INSERT INTO issues (product_id, qty, date, note)
         VALUES (?, ?, ?, ?)
@@ -57,18 +70,11 @@ try {
         // 4. Status Automation Logic
         updateWorkOrderStatus($conn, $workOrder);
 
-        $response = [
+        echo json_encode([
             'success' => true,
             'message' => 'Issuing record added successfully',
             'new_total_issued' => $totalIssued + $issuedQty
-        ];
-        
-        if ($hasWarning) {
-            $response['warning'] = true;
-            $response['warning_message'] = $warningMessage;
-        }
-        
-        echo json_encode($response);
+        ]);
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to add issuing record']);
     }
@@ -99,13 +105,21 @@ function updateWorkOrderStatus($conn, $workOrder) {
         $received = intval($totals['total_received']);
         $issued = intval($totals['total_issued']);
 
+        // CORRECT Status Logic:
+        // - created: No receiving or issuing
+        // - received: Has receiving, no issuing yet
+        // - pending: Has issuing but not all has been issued
+        // - done: All issued equals all received (balanced)
+        
         $newStatus = 'created';
-        if ($issued >= $mr && $mr > 0) {
-            $newStatus = 'done';
-        } elseif ($issued > 0) {
-            $newStatus = 'issuing';
-        } elseif ($received > 0) {
-            $newStatus = 'receiving';
+        if ($received == 0 && $issued == 0) {
+            $newStatus = 'created';
+        } elseif ($received > 0 && $issued == 0) {
+            $newStatus = 'received';
+        } elseif ($issued > 0 && $issued < $received) {
+            $newStatus = 'pending';
+        } elseif ($issued > 0 && $issued >= $received) {
+            $newStatus = 'done';  // When issued >= received (balanced or shortage created)
         }
 
         $updateStmt = $conn->prepare("UPDATE header_infor SET status = ? WHERE work_order = ?");

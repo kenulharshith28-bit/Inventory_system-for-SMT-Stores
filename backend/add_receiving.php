@@ -38,14 +38,16 @@ try {
     $mrQty = intval($productData['mr_qty']);
     $totalReceived = intval($productData['total_received']);
 
-    // 2. Logic: Check for over receiving but ALLOW if confirmed (force=true)
-    if ($totalReceived + $receivedQty > $mrQty && $force !== 'true') {
+    // 2. Logic: Check if receiving reaches/exceeds MR Qty - NOTIFY but ALLOW if force=true
+    if ($totalReceived + $receivedQty >= $mrQty && $force !== 'true') {
+        $newTotal = $totalReceived + $receivedQty;
         echo json_encode([
             'success' => false, 
-            'error' => 'OVER_LIMIT',
-            'message' => "Warning: Adding $receivedQty will exceed MR Qty ($mrQty). Current total is $totalReceived.",
+            'error' => 'MR_FULFILLED',
+            'message' => "ℹ️ INFO: Adding $receivedQty will reach/exceed MR Qty ($mrQty). Total will be $newTotal. Continue to fulfill MR?",
             'limit' => $mrQty,
-            'current' => $totalReceived
+            'current' => $totalReceived,
+            'new_total' => $newTotal
         ]);
         exit;
     }
@@ -92,13 +94,21 @@ function updateWorkOrderStatus($conn, $workOrder) {
         $received = intval($totals['total_received']);
         $issued = intval($totals['total_issued']);
 
+        // CORRECT Status Logic:
+        // - created: No receiving or issuing
+        // - received: Has receiving, no issuing yet
+        // - pending: Has issuing but not all has been issued
+        // - done: All issued equals all received (balanced)
+        
         $newStatus = 'created';
-        if ($issued >= $mr && $mr > 0) {
-            $newStatus = 'done'; 
-        } elseif ($issued > 0) {
-            $newStatus = 'issuing';
-        } elseif ($received > 0) {
-            $newStatus = 'receiving';
+        if ($received == 0 && $issued == 0) {
+            $newStatus = 'created';
+        } elseif ($received > 0 && $issued == 0) {
+            $newStatus = 'received';
+        } elseif ($issued > 0 && $issued < $received) {
+            $newStatus = 'pending';
+        } elseif ($issued > 0 && $issued >= $received) {
+            $newStatus = 'done';  // When issued >= received (balanced or shortage created)
         }
 
         $updateStmt = $conn->prepare("UPDATE header_infor SET status = ? WHERE work_order = ?");
