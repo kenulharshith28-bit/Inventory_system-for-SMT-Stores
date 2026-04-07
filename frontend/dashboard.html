@@ -28,14 +28,20 @@
         </div>
         
         <nav class="sidebar-nav">
-            <button onclick="showSection('new')" id="nav-new" class="nav-item active">
+            <button onclick="showSection('home')" id="nav-home" class="nav-item active">
+                <i class="fas fa-house"></i> <span>Home</span>
+            </button>
+            <button onclick="showSection('new')" id="nav-new" class="nav-item">
                 <i class="fas fa-plus"></i> <span>New Work</span>
             </button>
-            <button onclick="showSection('search')" id="nav-search" class="nav-item">
-                <i class="fas fa-search"></i> <span>Search</span>
+            <button onclick="showSection('master')" id="nav-master" class="nav-item">
+                <i class="fas fa-database"></i> <span>Master Data</span>
             </button>
             <button onclick="showSection('edit')" id="nav-edit" class="nav-item">
                 <i class="fas fa-edit"></i> <span>Edit</span>
+            </button>
+            <button onclick="showSection('receivingIssuing')" id="nav-receivingIssuing" class="nav-item">
+                <i class="fas fa-exchange-alt"></i> <span>Receive/Issue</span>
             </button>
             <button onclick="logout()" class="nav-item logout-item">
                 <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
@@ -64,133 +70,378 @@
             </div>
         </header>
 
-        <!-- Stats Grid -->
-        <section class="dashboard-grid stats-row">
-            <div class="glass-card stat-box">
-                <div class="stat-icon-wrap orders"><i class="fas fa-shopping-bag"></i></div>
-                <div class="stat-content">
-                    <span class="stat-label">Total Orders</span>
-                    <h2 id="total">0</h2>
+        <section id="homeSection" class="content-section">
+            <section class="dashboard-grid stats-row">
+                <div class="glass-card stat-box">
+                    <div class="stat-icon-wrap orders"><i class="fas fa-shopping-bag"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label">Total Orders</span>
+                        <h2 id="total">0</h2>
+                    </div>
+                </div>
+                <div class="glass-card stat-box">
+                    <div class="stat-icon-wrap pending"><i class="far fa-clock"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label">Open</span>
+                        <h2 id="pending">0</h2>
+                    </div>
+                </div>
+                <div class="glass-card stat-box">
+                    <div class="stat-icon-wrap done"><i class="far fa-check-circle"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label">Completed</span>
+                        <h2 id="done">0</h2>
+                    </div>
+                </div>
+            </section>
+
+            <div class="dashboard-grid middle-row">
+                <div class="glass-card chart-card trends">
+                    <div class="card-header">
+                        <h3>Work Order Trends</h3>
+                        <div class="time-filter">
+                            <select id="timeRangeSelect" onchange="loadTable()">
+                                <option value="today">Today</option>
+                                <option value="7days" selected>Past 7 Days</option>
+                                <option value="30days">Past 30 Days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="trendsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="glass-card chart-card status-doughnut">
+                    <div class="card-header">
+                        <h3>Order Status</h3>
+                        <i class="fas fa-ellipsis-h"></i>
+                    </div>
+                    <div class="donut-container">
+                        <canvas id="statusChart"></canvas>
+                        <div class="donut-info">
+                            <span id="pendingPercent">0%</span>
+                            <p>Open</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="glass-card stat-box">
-                <div class="stat-icon-wrap pending"><i class="far fa-clock"></i></div>
-                <div class="stat-content">
-                    <span class="stat-label">Pending</span>
-                    <h2 id="pending">0</h2>
-                </div>
-            </div>
-            <div class="glass-card stat-box">
-                <div class="stat-icon-wrap done"><i class="far fa-check-circle"></i></div>
-                <div class="stat-content">
-                    <span class="stat-label">Completed</span>
-                    <h2 id="done">0</h2>
+
+            <div class="dashboard-grid home-table-row">
+                <div class="glass-card table-card">
+                    <div class="card-header">
+                        <h3>Recent Work Orders</h3>
+                        <div class="table-tools">
+                            <i class="fas fa-filter"></i>
+                            <i class="fas fa-download"></i>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Work Order</th>
+                                    <th>Customer</th>
+                                    <th>Item</th>
+                                    <th>MRN No</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Charts & Form Section -->
-        <div class="dashboard-grid middle-row">
-            <!-- Left: Trends Chart -->
-            <div class="glass-card chart-card trends">
-                <div class="card-header">
-                    <h3>Work Order Trends</h3>
-                    <div class="time-filter">
-                        <select id="timeRangeSelect" onchange="loadTable()">
-                            <option value="today">Today</option>
-                            <option value="7days" selected>Past 7 Days</option>
-                            <option value="30days">Past 30 Days</option>
-                        </select>
+        <section id="newSection" class="content-section content-hidden">
+            <div class="work-order-container">
+                <!-- LEFT: Form Input -->
+                <div class="work-order-form-panel">
+                    <div id="newForm" class="glass-card form-card">
+                        <div class="form-header">
+                            <h3>New Work Order</h3>
+                        </div>
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label>Customer Name</label>
+                                <select id="name" onkeydown="handleEnterKey(event, 'work_order')">
+                                    <option value="">Select customer</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Work Order</label>
+                                <input type="text" id="work_order" placeholder="WO-1001" onkeydown="handleEnterKey(event, 'mrn_no')">
+                            </div>
+                            <div class="input-group">
+                                <label>MRN No</label>
+                                <input type="text" id="mrn_no" placeholder="MRN-001" onkeydown="handleEnterKey(event, 'cut_qty')">
+                            </div>
+                            <div class="input-group">
+                                <label>Cut Qty</label>
+                                <input type="number" id="cut_qty" placeholder="100" onkeydown="handleEnterKey(event, 'location')">
+                            </div>
+                            <div class="input-group">
+                                <label>Location</label>
+                                <input type="text" id="location" placeholder="Line A" onkeydown="handleEnterKey(event, 'work_date')">
+                            </div>
+                            <div class="input-group">
+                                <label>Work Date</label>
+                                <input type="date" id="work_date" onkeydown="handleEnterKey(event, 'status')">
+                            </div>
+                            <div class="input-group full-width">
+                                <label>Status</label>
+                                <select id="status" onkeydown="handleEnterKey(event, 'item')">
+                                    <option value="created" selected>Created</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="done">Done</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Products Section -->
+                        <div class="products-section">
+                            <div class="section-header">
+                                <h4>Products <i class="fas fa-box"></i></h4>
+                                <small>Add one or multiple products to this work order</small>
+                            </div>
+
+                            <!-- Add Single Product Form -->
+                            <div class="product-form">
+                                <div class="form-grid">
+                                    <div class="input-group">
+                                        <label>Item Code</label>
+                                        <input type="text" id="item_code" placeholder="ITM-001" onkeydown="handleEnterKey(event, 'item')">
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Item</label>
+                                        <select id="item" onkeydown="handleEnterKey(event, 'colour')">
+                                            <option value="">Select item</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Colour</label>
+                                        <input type="text" id="colour" placeholder="Blue" onkeydown="handleEnterKey(event, 'size')">
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Size</label>
+                                        <select id="size" onkeydown="handleEnterKey(event, 'unit')">
+                                            <option value="">Select size</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Unit</label>
+                                        <input type="text" id="unit" value="Pcs" onkeydown="handleEnterKey(event, 'mr_qty')">
+                                    </div>
+                                    <div class="input-group">
+                                        <label>MR Qty</label>
+                                        <input type="number" id="mr_qty" placeholder="100" onkeydown="handleProductEnter(event)">
+                                    </div>
+                                </div>
+                                <div class="product-form-actions">
+                                    <button class="secondary-btn" type="button" onclick="addProductToList()">
+                                        <i class="fas fa-plus"></i> Add Product
+                                    </button>
+                                    <button class="secondary-btn" type="button" onclick="toggleBulkView()" style="margin-left: 0.5rem;">
+                                        <i class="fas fa-list"></i> Bulk Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Products List -->
+                            <div id="productsList" class="products-list-container" style="display: none;">
+                                <h5>Products to Add (<span id="bulletproductCount">0</span>)</h5>
+                                <table class="products-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Item</th>
+                                            <th>Code</th>
+                                            <th>Colour</th>
+                                            <th>Size</th>
+                                            <th>Unit</th>
+                                            <th>Qty</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="productsTableBody"></tbody>
+                                </table>
+                            </div>
+
+                            <!-- Bulk JSON Input -->
+                            <div id="bulkInputView" class="bulk-input-container" style="display: none; margin-top: 1rem;">
+                                <h5>Bulk Add Products (JSON Format)</h5>
+                                <textarea id="bulkJsonInput" class="bulk-textarea" placeholder='[{"item": "T-Shirt", "item_code": "TS001", "colour": "Red", "size": "M", "unit": "Pcs", "mr_qty": 50}, {"item": "Jeans", "item_code": "J001", "colour": "Blue", "size": "L", "unit": "Pcs", "mr_qty": 30}]' style="min-height: 120px; width: 100%; font-family: monospace; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+                                <div class="product-form-actions" style="margin-top: 0.75rem;">
+                                    <button class="secondary-btn" type="button" onclick="parseAndAddBulkProducts()">
+                                        <i class="fas fa-paste"></i> Parse & Add
+                                    </button>
+                                    <button class="secondary-btn" type="button" onclick="toggleBulkView()" style="margin-left: 0.5rem;">
+                                        <i class="fas fa-arrow-left"></i> Back
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions" style="margin-top: 1.5rem;">
+                            <button class="primary-btn" onclick="addWorkWithProducts()">
+                                <i class="fas fa-save"></i> <span>Save Work Order & Products</span>
+                            </button>
+                            <button class="secondary-btn" onclick="clearAllForms()" style="margin-left: 0.5rem;">
+                                <i class="fas fa-redo"></i> Clear All
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="chart-wrapper">
-                    <canvas id="trendsChart"></canvas>
-                </div>
-            </div>
 
-            <!-- Right: Status Doughnut -->
-            <div class="glass-card chart-card status-doughnut">
-                <div class="card-header">
-                    <h3>Order Status</h3>
-                    <i class="fas fa-ellipsis-h"></i>
-                </div>
-                <div class="donut-container">
-                    <canvas id="statusChart"></canvas>
-                    <div class="donut-info">
-                        <span id="pendingPercent">0%</span>
-                        <p>Pending</p>
+                <!-- RIGHT: Live Products Preview -->
+                <div class="work-order-preview-panel">
+                    <div class="glass-card preview-card">
+                        <div class="preview-header">
+                            <h4><i class="fas fa-eye"></i> Products Preview</h4>
+                            <span class="preview-counter" id="previewCounter">0 products</span>
+                        </div>
+                        
+                        <!-- Work Order Header Summary -->
+                        <div class="preview-summary">
+                            <div class="summary-row">
+                                <span class="summary-label">Customer:</span>
+                                <span class="summary-value" id="previewCustomer">—</span>
+                            </div>
+                            <div class="summary-row">
+                                <span class="summary-label">Work Order:</span>
+                                <span class="summary-value" id="previewWorkOrder">—</span>
+                            </div>
+                            <div class="summary-row">
+                                <span class="summary-label">Status:</span>
+                                <span class="summary-value" id="previewStatus">—</span>
+                            </div>
+                        </div>
+
+                        <!-- Products Preview List -->
+                        <div class="preview-products">
+                            <div id="previewProductsContainer" style="min-height: 200px;">
+                                <div class="empty-state">
+                                    <i class="fas fa-plus-circle"></i>
+                                    <p>No products added yet</p>
+                                    <small>Add products using the form on the left</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="dashboard-grid bottom-row">
-            <!-- Table Section -->
-            <div class="glass-card table-card">
-                <div class="card-header">
-                    <h3>Recent Work Orders</h3>
-                    <div class="table-tools">
-                        <i class="fas fa-filter"></i>
-                        <i class="fas fa-download"></i>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Item</th>
-                                <th>Deadline</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Form Section -->
-            <div class="glass-card form-card">
-                <!-- New Work Form -->
-                <div id="newForm" class="form-container-active">
+        <section id="masterSection" class="content-section content-hidden">
+            <div class="single-panel">
+                <div class="glass-card form-card">
                     <div class="form-header">
-                        <h3>New Work Order</h3>
+                        <h3>Master Data</h3>
                     </div>
-                    <div class="form-grid">
-                        <div class="input-group">
-                            <label>Customer Name</label>
-                            <input type="text" id="name" placeholder="Arjun Kumar">
+                    <div class="master-grid">
+                        <div class="master-card">
+                            <div class="form-header">
+                                <h4><i class="fas fa-users" style="color: var(--primary); margin-right: 0.5rem;"></i> Customers</h4>
+                            </div>
+                            <div class="customer-admin-row">
+                                <div class="customer-admin-input">
+                                    <label>Add New Customer</label>
+                                    <input type="text" id="new_customer_option" placeholder="Enter customer name">
+                                </div>
+                                <button class="primary-btn admin-add-btn" type="button" onclick="addMasterData('customer')">
+                                    Add
+                                </button>
+                            </div>
+                            <div class="customer-list-card">
+                                <div id="customerList" class="customer-chip-list"></div>
+                            </div>
                         </div>
-                        <div class="input-group">
-                            <label>Phone Number</label>
-                            <input type="text" id="phone" placeholder="9976543210">
+                        <div class="master-card">
+                            <div class="form-header">
+                                <h4><i class="fas fa-box" style="color: var(--info); margin-right: 0.5rem;"></i> Items</h4>
+                            </div>
+                            <div class="customer-admin-row">
+                                <div class="customer-admin-input">
+                                    <label>Add New Item</label>
+                                    <input type="text" id="new_item_option" placeholder="Enter item name">
+                                </div>
+                                <button class="primary-btn admin-add-btn" type="button" onclick="addMasterData('item')">
+                                    Add
+                                </button>
+                            </div>
+                            <div class="customer-list-card">
+                                <div id="itemList" class="customer-chip-list"></div>
+                            </div>
                         </div>
-                        <div class="input-group">
-                            <label>Item Type</label>
-                            <input type="text" id="item" placeholder="Shirt/Pant/Dress">
-                        </div>
-                        <div class="input-group">
-                            <label>Deadline Date</label>
-                            <input type="date" id="deadline">
-                        </div>
-                        <div class="input-group full-width">
-                            <label>Measurements</label>
-                            <textarea id="measurements" placeholder="L: 40, W: 32..."></textarea>
-                        </div>
-                        <div class="input-group full-width">
-                            <label>Notes</label>
-                            <textarea id="notes" placeholder="Additional details..."></textarea>
+                        <div class="master-card">
+                            <div class="form-header">
+                                <h4><i class="fas fa-ruler-combined" style="color: var(--warning); margin-right: 0.5rem;"></i> Sizes</h4>
+                            </div>
+                            <div class="customer-admin-row">
+                                <div class="customer-admin-input">
+                                    <label>Add New Size</label>
+                                    <input type="text" id="new_size_option" placeholder="Enter size">
+                                </div>
+                                <button class="primary-btn admin-add-btn" type="button" onclick="addMasterData('size')">
+                                    Add
+                                </button>
+                            </div>
+                            <div class="customer-list-card">
+                                <div id="sizeList" class="customer-chip-list"></div>
+                            </div>
                         </div>
                     </div>
-                    <button class="primary-btn" onclick="addWork()">
-                        <span>Save Work Order</span>
-                    </button>
+
+                    <!-- Master Data Database Table View -->
+                    <div class="master-data-table-section" style="margin-top: 2rem;">
+                        <div class="form-header" style="margin-bottom: 1rem;">
+                            <h3><i class="fas fa-table" style="color: var(--info); margin-right: 0.5rem;"></i> All Master Data</h3>
+                        </div>
+                        <div class="table-responsive" style="max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
+                            <table class="master-data-table">
+                                <thead style="position: sticky; top: 0; background: #f7fafc; z-index: 10;">
+                                    <tr>
+                                        <th style="text-align: center; width: 60px;">ID</th>
+                                        <th style="width: 120px;">Type</th>
+                                        <th>Value</th>
+                                        <th style="width: 180px;">Created At</th>
+                                        <th style="text-align: center; width: 100px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="masterDataTableBody">
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; padding: 2rem; color: #a0aec0;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="editSection" class="content-section content-hidden">
+            <div class="single-panel">
+                <!-- Search Panel -->
+                <div class="glass-card form-card">
+                    <div class="form-header">
+                        <h3>Search & Edit Work Orders</h3>
+                    </div>
+                    <div class="search-edit-panel">
+                        <div class="input-group full-width">
+                            <label>Search Work Order</label>
+                            <input type="text" id="editSearchInput" placeholder="Search by Work Order #, Customer, MRN No..." onkeyup="searchEditWorkOrders()">
+                        </div>
+                        <div id="editSearchResults" class="edit-search-results" style="display: none;"></div>
+                    </div>
                 </div>
 
-                <!-- Edit Work Form -->
-                <div id="editForm" style="display:none;">
+                <!-- Edit Form -->
+                <div id="editForm" class="glass-card form-card">
                     <div class="form-header">
                         <h3>Edit Order #<span id="display_id"></span></h3>
                     </div>
@@ -198,46 +449,296 @@
                     <div class="form-grid">
                         <div class="input-group">
                             <label>Customer Name</label>
-                            <input type="text" id="edit_name">
-                        </div>
-                        <div class="input-group">
-                            <label>Phone Number</label>
-                            <input type="text" id="edit_phone">
-                        </div>
-                        <div class="input-group">
-                            <label>Item Type</label>
-                            <input type="text" id="edit_item">
-                        </div>
-                        <div class="input-group">
-                            <label>Deadline Date</label>
-                            <input type="date" id="edit_deadline">
-                        </div>
-                        <div class="input-group">
-                            <label>Order Status</label>
-                            <select id="edit_status">
-                                <option value="Pending">Pending</option>
-                                <option value="Done">Done</option>
+                            <select id="edit_name">
+                                <option value="">Select customer</option>
                             </select>
                         </div>
-                        <div class="input-group full-width">
-                            <label>Measurements</label>
-                            <textarea id="edit_measurements"></textarea>
+                        <div class="input-group">
+                            <label>Work Order</label>
+                            <input type="text" id="edit_work_order">
+                        </div>
+                        <div class="input-group">
+                            <label>MRN No</label>
+                            <input type="text" id="edit_mrn_no">
+                        </div>
+                        <div class="input-group">
+                            <label>Cut Qty</label>
+                            <input type="number" id="edit_cut_qty">
+                        </div>
+                        <div class="input-group">
+                            <label>Location</label>
+                            <input type="text" id="edit_location">
+                        </div>
+                        <div class="input-group">
+                            <label>Work Date</label>
+                            <input type="date" id="edit_work_date">
+                        </div>
+                        <div class="input-group">
+                            <label>Item Code</label>
+                            <input type="text" id="edit_item_code">
+                        </div>
+                        <div class="input-group">
+                            <label>Item</label>
+                            <select id="edit_item">
+                                <option value="">Select item</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Colour</label>
+                            <input type="text" id="edit_colour">
+                        </div>
+                        <div class="input-group">
+                            <label>Size</label>
+                            <select id="edit_size">
+                                <option value="">Select size</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Unit</label>
+                            <input type="text" id="edit_unit">
+                        </div>
+                        <div class="input-group">
+                            <label>MR Qty</label>
+                            <input type="number" id="edit_mr_qty">
                         </div>
                         <div class="input-group full-width">
-                            <label>Notes</label>
-                            <textarea id="edit_notes"></textarea>
+                            <label>Status</label>
+                            <select id="edit_status">
+                                <option value="created">Created</option>
+                                <option value="pending">Pending</option>
+                                <option value="done">Done</option>
+                            </select>
                         </div>
                     </div>
                     <div class="btn-row">
                         <button class="primary-btn" onclick="updateWork()">Update Order</button>
-                        <button class="secondary-btn" onclick="showSection('new')">Cancel</button>
+                        <button class="secondary-btn" onclick="showSection('home')">Cancel</button>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Receiving & Issuing Section -->
+        <section id="receivingIssuingSection" class="content-section content-hidden">
+            <div class="single-panel">
+                <div class="glass-card form-card">
+                    <div class="form-header">
+                        <h3>Receiving & Issuing Management</h3>
+                    </div>
+
+                    <!-- Step 1: Search & Select Work Order -->
+                    <div class="workflow-step">
+                        <div class="step-number">1</div>
+                        <div class="step-header">
+                            <h4>Search & Select Work Order</h4>
+                        </div>
+                        <div class="form-group-row">
+                            <div class="form-group-col full">
+                                <label>Work Order Number</label>
+                                <input type="text" id="wo_search" placeholder="Search by WO #, Customer, or Item..." onkeyup="searchWorkOrders()">
+                                <div id="woSearchResults" class="search-results" style="display: none;"></div>
+                            </div>
+                        </div>
+                        <div id="selectedWOInfo" class="selected-info" style="display: none;">
+                            <div class="info-badge">
+                                <span id="selectedWONumber">WO-1001</span>
+                                <span id="selectedWOCustomer">Customer XYZ</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Select Product from Work Order -->
+                    <div class="workflow-step" id="step2Container" style="display: none; opacity: 0.5;">
+                        <div class="step-number">2</div>
+                        <div class="step-header">
+                            <h4>Select Product from Work Order</h4>
+                        </div>
+                        <div class="form-group-row">
+                            <div class="form-group-col full">
+                                <label>Products in Selected Work Order</label>
+                                <select id="product_selector" onchange="selectProduct()">
+                                    <option value="">Select a product</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="selectedProductInfo" class="selected-info" style="display: none;">
+                            <div class="product-info-badge">
+                                <div><strong>Item:</strong> <span id="productItem">T-Shirt</span></div>
+                                <div><strong>Colour:</strong> <span id="productColour">Blue</span></div>
+                                <div><strong>Size:</strong> <span id="productSize">M</span></div>
+                                <div><strong>MR Qty:</strong> <span id="productMRQty">100</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Enter Receiving & Issuing Details -->
+                    <div class="workflow-step" id="step3Container" style="display: none; opacity: 0.5;">
+                        <div class="step-number">3</div>
+                        <div class="step-header">
+                            <h4>Enter Receiving & Issuing Details</h4>
+                        </div>
+
+                        <!-- Shortage Alert -->
+                        <div id="shortageAlert" class="shortage-alert">
+                            <div class="shortage-alert-header">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Shortage Detected
+                            </div>
+                            <div class="shortage-alert-content" id="shortageAlertContent">
+                                The received + issued quantity is less than MR quantity
+                            </div>
+                            <div class="shortage-actions">
+                                <button class="ignore-shortage-btn" onclick="ignoreCurrentShortage()">
+                                    <i class="fas fa-times-circle"></i> Ignore Shortage
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Receiving & Issuing Forms -->
+                        <div class="receiving-issuing-container">
+                            <!-- Receiving Form -->
+                            <div class="receiving-card">
+                                <div class="card-title">
+                                    <i class="fas fa-inbox" style="color: var(--success);"></i>
+                                    Receiving
+                                </div>
+
+                                <div class="form-group-row full">
+                                    <div class="form-group-col full">
+                                        <label>Received Date (Auto-filled, editable)</label>
+                                        <input type="date" id="receiving_date">
+                                    </div>
+                                </div>
+
+                                <div class="form-group-row">
+                                    <div class="form-group-col">
+                                        <label>Received Quantity</label>
+                                        <input type="number" id="receiving_qty" placeholder="Enter quantity" min="1">
+                                    </div>
+                                </div>
+
+                                <div class="form-group-row full">
+                                    <div class="form-group-col full">
+                                        <label>Notes</label>
+                                        <textarea id="receiving_notes" placeholder="Add receiving notes..." rows="3"></textarea>
+                                    </div>
+                                </div>
+
+                                <button class="receiving-issuing-button" onclick="addReceivingRecord()">
+                                    <i class="fas fa-plus"></i> Add Receiving
+                                </button>
+
+                                <!-- Receiving History -->
+                                <div class="receiving-issuing-history" id="receivingHistory" style="display: none;">
+                                    <div class="history-title"><i class="fas fa-history"></i> Receiving History</div>
+                                    <div id="receivingHistoryList"></div>
+                                </div>
+
+                                <!-- Inventory Summary -->
+                                <div class="inventory-summary" id="receivingInventorySummary">
+                                    <div class="summary-item">
+                                        <span class="summary-label">MR Quantity:</span>
+                                        <span class="summary-value" id="summary_mr_qty">0</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">Total Received:</span>
+                                        <span class="summary-value" id="summary_total_received">0</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">Total Issued:</span>
+                                        <span class="summary-value" id="summary_total_issued">0</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">Remaining:</span>
+                                        <span class="summary-value shortage" id="summary_remaining">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Issuing Form -->
+                            <div class="issuing-card">
+                                <div class="card-title">
+                                    <i class="fas fa-paper-plane" style="color: var(--primary);"></i>
+                                    Issuing (Multiple Days)
+                                </div>
+
+                                <div class="form-group-row full">
+                                    <div class="form-group-col full">
+                                        <label>Issued Date (Auto-filled, editable)</label>
+                                        <input type="date" id="issuing_date">
+                                    </div>
+                                </div>
+
+                                <div class="form-group-row">
+                                    <div class="form-group-col">
+                                        <label>Issued Quantity</label>
+                                        <input type="number" id="issuing_qty" placeholder="Enter quantity" min="1">
+                                    </div>
+                                </div>
+
+                                <div class="form-group-row full">
+                                    <div class="form-group-col full">
+                                        <label>Notes</label>
+                                        <textarea id="issuing_notes" placeholder="Add issuing notes..." rows="3"></textarea>
+                                    </div>
+                                </div>
+
+                                <button class="receiving-issuing-button" style="background: var(--primary);" onclick="addIssuingRecord()">
+                                    <i class="fas fa-plus"></i> Add Issuing
+                                </button>
+
+                                <!-- Issuing History -->
+                                <div class="receiving-issuing-history" id="issuingHistory" style="display: none;">
+                                    <div class="history-title"><i class="fas fa-history"></i> Issuing History</div>
+                                    <div id="issuingHistoryList"></div>
+                                </div>
+
+                                <!-- Inventory Summary -->
+                                <div class="inventory-summary" id="issuingInventorySummary">
+                                    <div class="summary-item">
+                                        <span class="summary-label">MR Quantity:</span>
+                                        <span class="summary-value" id="summary_mr_qty_issuing">0</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">Total Received:</span>
+                                        <span class="summary-value" id="summary_total_received_issuing">0</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">Total Issued:</span>
+                                        <span class="summary-value" id="summary_total_issued_issuing">0</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">Remaining:</span>
+                                        <span class="summary-value shortage" id="summary_remaining_issuing">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Incomplete Work Orders -->
+                    <div class="incomplete-workorders">
+                        <div class="incomplete-title">
+                            <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i>
+                            Incomplete Work Orders (Shortages)
+                        </div>
+                        <div class="incomplete-list" id="incompleteList">
+                            <div style="text-align: center; color: #999; padding: 2rem;">
+                                <i class="fas fa-check-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                                <p>All work orders are complete!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 </div>
 
-<script src="script.js"></script>
+<script src="products-manager.js"></script>
+<script src="dashboard_master.js"></script>
+<script src="receiving_issuing.js"></script>
+<script src="autocomplete.js"></script>
 </body>
 </html>

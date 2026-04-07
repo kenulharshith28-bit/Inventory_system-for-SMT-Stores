@@ -1,9 +1,6 @@
 <?php
 /**
  * Get Chart Data - Work Order Trends
- * 
- * Securely filters and groups work orders by date and status.
- * Ensures all dates in the range are included with 0s.
  */
 include "db.php";
 
@@ -14,18 +11,19 @@ $startDate = clone $now;
 if ($range === 'today') {
     $startDateStr = $now->format('Y-m-d');
 } elseif ($range === '30days') {
-    $startDate->modify('-29 days'); // Inclusive of today = 30 days total
+    $startDate->modify('-29 days');
     $startDateStr = $startDate->format('Y-m-d');
 } else {
-    $startDate->modify('-6 days'); // Inclusive of today = 7 days total
+    $startDate->modify('-6 days');
     $startDateStr = $startDate->format('Y-m-d');
 }
 
-// 1. Fetch grouped counts from DB
-$sql = "SELECT order_date, status, COUNT(*) as count 
-        FROM work_orders 
-        WHERE order_date >= ? 
-        GROUP BY order_date, status";
+$sql = "
+    SELECT work_date, status, COUNT(*) AS count
+    FROM header_infor
+    WHERE work_date >= ?
+    GROUP BY work_date, status
+";
 
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("s", $startDateStr);
@@ -34,15 +32,20 @@ $result = $stmt->get_result();
 
 $counts = [];
 while ($row = $result->fetch_assoc()) {
-    $date = $row['order_date'];
+    $date = $row['work_date'];
     $status = strtolower($row['status']);
+
     if (!isset($counts[$date])) {
         $counts[$date] = ['pending' => 0, 'done' => 0];
     }
-    $counts[$date][$status] = (int)$row['count'];
+
+    if ($status === 'done') {
+        $counts[$date]['done'] = (int)$row['count'];
+    } else {
+        $counts[$date]['pending'] += (int)$row['count'];
+    }
 }
 
-// 2. Generate full range of dates in PHP to ensure zero-counts are included
 $chartData = [];
 if ($range === 'today') {
     $dateStr = $now->format('Y-m-d');
@@ -54,7 +57,7 @@ if ($range === 'today') {
 } else {
     $currentDate = clone $startDate;
     $today = clone $now;
-    $today->modify('+1 day'); // Ensure today is inclusive in loop
+    $today->modify('+1 day');
 
     while ($currentDate->format('Y-m-d') !== $today->format('Y-m-d')) {
         $dateStr = $currentDate->format('Y-m-d');
