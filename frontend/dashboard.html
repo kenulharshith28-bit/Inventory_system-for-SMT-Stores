@@ -8,6 +8,29 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Primary XLSX Library from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js" 
+            onerror="console.warn('Primary XLSX CDN failed, will try fallback')"></script>
+    <!-- Fallback XLSX Library from Alternative CDN -->
+    <script>
+        window.XLSX_LOADING_TIMEOUT = setTimeout(() => {
+            if (typeof XLSX === 'undefined') {
+                console.warn('⚠️ Primary XLSX CDN timeout, loading fallback...');
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js';
+                script.onerror = () => {
+                    console.error('✗ All XLSX CDNs failed - Excel export may not work');
+                };
+                script.onload = () => {
+                    console.log('✓ Fallback XLSX loaded successfully');
+                };
+                document.head.appendChild(script);
+            } else {
+                console.log('✓ Primary XLSX CDN loaded successfully');
+                clearTimeout(window.XLSX_LOADING_TIMEOUT);
+            }
+        }, 2000);
+    </script>
     <script>
     // Global User State
     let currentUser = null;
@@ -39,6 +62,53 @@
         }
     });
     </script>
+    <style>
+        /* Print Styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            .app-container {
+                margin-left: 0;
+            }
+            
+            .sidebar-new {
+                display: none !important;
+            }
+            
+            .main-view {
+                margin-left: 0;
+                background: white;
+            }
+            
+            .top-header {
+                display: none;
+            }
+            
+            .invoice-card {
+                box-shadow: none;
+                border: 1px solid #e2e8f0;
+            }
+            
+            /* Bill Only Print Mode */
+            .bill-only-print .history-block {
+                display: none !important;
+            }
+            
+            .bill-only-print .invoice-details-grid {
+                page-break-inside: avoid;
+            }
+            
+            .bill-only-print .invoice-table-container {
+                page-break-inside: avoid;
+            }
+            
+            body {
+                background: white;
+            }
+        }
+    </style>
 </head>
 <body class="dashboard-body">
 
@@ -66,6 +136,9 @@
             <button onclick="showSection('receivingIssuing')" id="nav-receivingIssuing" class="nav-item">
                 <i class="fas fa-exchange-alt"></i> <span>Receive/Issue</span>
             </button>
+            <button onclick="showSection('search')" id="nav-search" class="nav-item">
+                <i class="fas fa-search"></i> <span>Search</span>
+            </button>
             <button onclick="showSection('users')" id="nav-users" class="nav-item">
                 <i class="fas fa-users"></i> <span>Users</span>
             </button>
@@ -88,10 +161,14 @@
                 </div>
             </div>
             
-            <div class="header-search">
-                <div class="search-input-wrapper">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="searchInput" placeholder="Search orders..." onkeyup="searchWork()">
+            <div class="backup-countdown-card" aria-live="polite">
+                <div class="backup-countdown-icon">
+                    <i class="fas fa-database"></i>
+                </div>
+                <div class="backup-countdown-text">
+                    <span class="backup-countdown-label">Hourly backup</span>
+                    <strong id="backupCountdownValue">--:--:--</strong>
+                    <small id="backupCountdownNext">Next backup at --:--</small>
                 </div>
             </div>
         </header>
@@ -147,7 +224,7 @@
                         <canvas id="statusChart"></canvas>
                         <div class="donut-info">
                             <span id="pendingPercent">0%</span>
-                            <p>Open</p>
+                            <p>Pending</p>
                         </div>
                     </div>
                 </div>
@@ -156,7 +233,7 @@
             <div class="dashboard-grid home-table-row">
                 <div class="glass-card table-card">
                     <div class="card-header">
-                        <h3>Recent Work Orders</h3>
+                        <h3>Shortage Work Orders</h3>
                         <div class="table-tools">
                             <i class="fas fa-filter"></i>
                             <i class="fas fa-download"></i>
@@ -457,12 +534,12 @@
                     <div class="form-header">
                         <h3>Search & Edit Work Orders</h3>
                     </div>
-                    <div class="search-edit-panel">
+                    <div class="search-edit-panel" style="position: relative;">
                         <div class="input-group full-width">
                             <label>Search Work Order</label>
-                            <input type="text" id="editSearchInput" placeholder="Search by Work Order #, Customer, MRN No..." onkeyup="searchEditWorkOrders()">
+                            <input type="text" id="editSearchInput" placeholder="Search by Work Order #, Customer, MRN No..." onkeyup="searchEditWorkOrders()" autocomplete="off">
                         </div>
-                        <div id="editSearchResults" class="edit-search-results" style="display: none;"></div>
+                        <div id="editSearchResults" class="edit-search-results suggestions-list" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 100; max-height: 300px; overflow-y: auto;"></div>
                     </div>
                 </div>
 
@@ -471,7 +548,11 @@
                     <div class="form-header">
                         <h3>Edit Order #<span id="display_id"></span></h3>
                     </div>
+                    <div id="editLoadingMessage" style="display:none; margin-bottom: 1rem; padding: 0.85rem 1rem; border-radius: 10px; background: #eff6ff; color: #1d4ed8; font-size: 0.92rem;">
+                        Loading work order from database...
+                    </div>
                     <input type="hidden" id="edit_id">
+                    <input type="hidden" id="edit_product_id">
                     <div class="form-grid">
                         <div class="input-group">
                             <label>Customer Name</label>
@@ -480,8 +561,8 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label>Work Order</label>
-                            <input type="text" id="edit_work_order">
+                            <label>Work Order <span style="color: #999; font-size: 0.85rem;">(Read-only)</span></label>
+                            <input type="text" id="edit_work_order" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
                         </div>
                         <div class="input-group">
                             <label>MRN No</label>
@@ -539,6 +620,131 @@
                     <div class="btn-row">
                         <button class="primary-btn" onclick="updateWork()">Update Order</button>
                         <button class="secondary-btn" onclick="showSection('home')">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Report Section (Invoice Style) -->
+        <section id="reportSection" class="content-section content-hidden">
+            <div class="single-panel">
+                <div class="glass-card invoice-card" id="printableReport">
+                    <!-- Invoice Header -->
+                    <div class="invoice-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #f1f5f9; padding-bottom: 1.5rem; margin-bottom: 2rem;">
+                        <div class="brand">
+                            <h2 style="color: var(--primary); margin: 0;">Clothing System</h2>
+                            <p style="color: #64748b; margin: 0.25rem 0 0;">Work Order Summary Report</p>
+                        </div>
+                        <div class="invoice-meta" style="text-align: right;">
+                            <h3 style="margin: 0; color: #1e293b;">REPORT #<span id="report_wo_display"></span></h3>
+                            <p style="color: #64748b; margin: 0.25rem 0 0;">Date: <span id="report_date_display"></span></p>
+                        </div>
+                    </div>
+
+                    <!-- Customer & WO Details -->
+                    <div class="invoice-details-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 2.5rem;">
+                        <div class="detail-group">
+                            <h4 style="color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Customer Information</h4>
+                            <div style="background: #f8fafc; padding: 1.25rem; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                <div style="margin-bottom: 0.5rem;"><strong>Name:</strong> <span id="rpt_customer_name"></span></div>
+                                <div style="margin-bottom: 0.5rem;"><strong>Location:</strong> <span id="rpt_location"></span></div>
+                                <div><strong>MRN No:</strong> <span id="rpt_mrn_no"></span></div>
+                            </div>
+                        </div>
+                        <div class="detail-group">
+                            <h4 style="color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Order Information</h4>
+                            <div style="background: #f8fafc; padding: 1.25rem; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                <div style="margin-bottom: 0.5rem;"><strong>Work Order:</strong> <span id="rpt_work_order"></span></div>
+                                <div style="margin-bottom: 0.5rem;"><strong>Work Date:</strong> <span id="rpt_work_date"></span></div>
+                                <div style="margin-bottom: 0.5rem;"><strong>Cut Qty:</strong> <span id="rpt_cut_qty"></span></div>
+                                <div><strong>Status:</strong> <span id="rpt_status_badge"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Products Table -->
+                    <div class="invoice-table-container" style="margin-bottom: 2.5rem;">
+                        <h4 style="color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Product Details</h4>
+                        <table class="report-table" style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                            <thead style="background: #f8fafc;">
+                                <tr>
+                                    <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Item / Code</th>
+                                    <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Colour/Size</th>
+                                    <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">MR Qty</th>
+                                    <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Received</th>
+                                    <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Issued</th>
+                                    <th style="padding: 1rem; text-align: right; border-bottom: 1px solid #e2e8f0;">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rpt_product_body">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- History Sections -->
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem;">
+                        <div class="history-block">
+                            <h4 style="color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Receiving History</h4>
+                            <div id="rpt_receiving_history" style="max-height: 300px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 8px;">
+                                <!-- History items -->
+                            </div>
+                        </div>
+                        <div class="history-block">
+                            <h4 style="color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Issuing History</h4>
+                            <div id="rpt_issuing_history" style="max-height: 300px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 8px;">
+                                <!-- History items -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary Footer -->
+                    <div class="invoice-footer" style="margin-top: 3rem; padding-top: 1.5rem; border-top: 2px dashed #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                        <div class="notes" style="color: #64748b; font-size: 0.85rem; max-width: 60%;">
+                            <strong>Notes:</strong> This is a system-generated report. It includes all recorded receiving and issuing transactions for the specified Work Order.
+                        </div>
+                        <div class="actions no-print">
+                            <button class="primary-btn" onclick="downloadBillAsXLSX()" style="margin-right: 0.5rem;">
+                                <i class="fas fa-file-excel"></i> Download XLSX
+                            </button>
+                            <button class="secondary-btn" onclick="printBillOnly()" style="margin-right: 0.5rem;">
+                                <i class="fas fa-print"></i> Print Bill Only
+                            </button>
+                            <button class="secondary-btn" onclick="window.print()" style="margin-right: 0.5rem;">
+                                <i class="fas fa-print"></i> Print Full Report
+                            </button>
+                            <button class="primary-btn" onclick="returnToSearch()">
+                                <i class="fas fa-arrow-left"></i> Back to Search
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search Section (Reporting) -->
+        <section id="searchSection" class="content-section content-hidden">
+            <div class="single-panel">
+                <div class="glass-card form-card">
+                    <div class="form-header">
+                        <h3><i class="fas fa-search" style="color: var(--primary); margin-right: 0.5rem;"></i> Search Work Orders & Reports</h3>
+                    </div>
+                    <div class="search-report-panel" style="position: relative;">
+                        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                                <label>Work Order Number</label>
+                                <input type="text" id="reportSearchInput" placeholder="Enter Work Order # to search..." onkeyup="suggestReportOrders()" onkeydown="handleReportSearchKeydown(event)" autocomplete="off">
+                            </div>
+                            <button class="primary-btn" type="button" onclick="generateReportFromSearch()" style="height: 45px; white-space: nowrap;">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                        <div id="reportSearchResults" class="edit-search-results suggestions-list" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 100; max-height: 300px; overflow-y: auto;"></div>
+                    </div>
+
+                    <div style="margin-top: 2rem; color: #64748b; font-size: 0.9rem; text-align: center; padding: 2rem; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
+                        <i class="fas fa-info-circle" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block; color: var(--primary);"></i>
+                        Enter a Work Order number above to see a complete invoice-style report including all products, receiving totals, and issuing history.
                     </div>
                 </div>
             </div>
@@ -674,8 +880,8 @@
                                         <span class="summary-label">Total Issued:</span>
                                         <span class="summary-value" id="summary_total_issued">0</span>
                                     </div>
-                                    <div class="summary-item">
-                                        <span class="summary-label">Remaining:</span>
+                                <div class="summary-item">
+                                        <span class="summary-label" id="summary_remaining_label">Remaining to MR:</span>
                                         <span class="summary-value shortage" id="summary_remaining">0</span>
                                     </div>
                                 </div>
@@ -733,8 +939,8 @@
                                         <span class="summary-label">Total Issued:</span>
                                         <span class="summary-value" id="summary_total_issued_issuing">0</span>
                                     </div>
-                                    <div class="summary-item">
-                                        <span class="summary-label">Remaining:</span>
+                                <div class="summary-item">
+                                        <span class="summary-label" id="summary_remaining_issuing_label">Issuing Shortage:</span>
                                         <span class="summary-value shortage" id="summary_remaining_issuing">0</span>
                                     </div>
                                 </div>
@@ -831,8 +1037,9 @@
     </main>
 </div>
 
-<script src="products-manager.js"></script>
 <script src="dashboard_master.js"></script>
+<script src="products-manager.js"></script>
+<script src="bill_export.js"></script>
 <script src="dashboard_users.js"></script>
 <script src="receiving_issuing.js"></script>
 <script src="autocomplete.js"></script>

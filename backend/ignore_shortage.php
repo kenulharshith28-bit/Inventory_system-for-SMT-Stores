@@ -16,7 +16,8 @@ try {
     // Add a flag to product_information to mark shortage as ignored
     $stmt = $conn->prepare("
         UPDATE product_information 
-        SET shortage_ignored = 1
+        SET shortage_ignored = 1,
+            ignored = 1
         WHERE id = ?
     ");
     

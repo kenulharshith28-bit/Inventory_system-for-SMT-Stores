@@ -41,7 +41,7 @@ $checkDuplicateStmt = $conn->prepare("
     WHERE work_order = ? AND item_code = ? AND colour = ? AND size = ? AND unit = ? AND mr_qty = ? AND id != ?
     LIMIT 1
 ");
-$checkDuplicateStmt->bind_param("ssssrii", $workOrder, $itemCode, $colour, $size, $unit, $mrQty, $productId);
+$checkDuplicateStmt->bind_param("sssssii", $workOrder, $itemCode, $colour, $size, $unit, $mrQty, $productId);
 $checkDuplicateStmt->execute();
 $duplicateResult = $checkDuplicateStmt->get_result();
 $checkDuplicateStmt->close();

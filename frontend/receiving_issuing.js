@@ -20,12 +20,10 @@ function initializeReceivingIssuing() {
 
 // Load all work orders
 function loadAllWorkOrders() {
-    fetch('../backend/get_work_with_shortage.php')
+    fetch('../backend/get_work.php?range=30days')
         .then(res => res.json())
         .then(data => {
-            if (data.success) {
-                allWorkOrders = data.data;
-            }
+            allWorkOrders = data;
         })
         .catch(err => console.error('Error loading work orders:', err));
 }
@@ -65,7 +63,7 @@ function searchWorkOrders() {
     resultsDiv.innerHTML = '';
     for (const [woNumber, woData] of Object.entries(uniqueWOs)) {
         const item = document.createElement('div');
-        item.className = 'search-result-item';
+        item.className = 'suggestion-item';
         item.innerHTML = `
             <div class="result-highlight">${woNumber}</div>
             <div class="result-subtitle">${woData.customer_name || 'N/A'}</div>
@@ -182,17 +180,25 @@ function loadProductDetails() {
                 document.getElementById('summary_mr_qty').textContent = calc.mr_qty;
                 document.getElementById('summary_total_received').textContent = calc.total_received;
                 document.getElementById('summary_total_issued').textContent = calc.total_issued;
-                document.getElementById('summary_remaining').textContent = calc.balance; // Stock Balance
+                document.getElementById('summary_remaining').textContent = calc.receiving_over_mr > 0 ? calc.receiving_over_mr : calc.receiving_shortage;
+                const receivingLabel = document.getElementById('summary_remaining_label');
+                if (receivingLabel) {
+                    receivingLabel.textContent = calc.receiving_over_mr > 0 ? 'Over MR:' : 'Remaining to MR:';
+                }
 
                 // Update Issuing Summary
                 document.getElementById('summary_mr_qty_issuing').textContent = calc.mr_qty;
                 document.getElementById('summary_total_received_issuing').textContent = calc.total_received;
                 document.getElementById('summary_total_issued_issuing').textContent = calc.total_issued;
-                document.getElementById('summary_remaining_issuing').textContent = calc.mr_shortage; // Shortage
+                document.getElementById('summary_remaining_issuing').textContent = calc.issuing_over_mr > 0 ? calc.issuing_over_mr : calc.issuing_shortage;
+                const issuingLabel = document.getElementById('summary_remaining_issuing_label');
+                if (issuingLabel) {
+                    issuingLabel.textContent = calc.issuing_over_mr > 0 ? 'Issued Over MR:' : (calc.issuing_shortage > 0 ? 'Issuing Shortage:' : 'Issued Match:');
+                }
 
                 // Show shortage alert if needed
                 if (data.hasShortage) {
-                    showShortageAlert(data.product, calc.mr_shortage);
+                    showShortageAlert(data.product, calc);
                 } else {
                     document.getElementById('shortageAlert').classList.remove('show');
                 }
@@ -567,16 +573,29 @@ function addIssuingRecord(isForced = false) {
 }
 
 // Show shortage alert
-function showShortageAlert(product, shortage) {
+function showShortageAlert(product, calc) {
     const alert = document.getElementById('shortageAlert');
     const content = document.getElementById('shortageAlertContent');
+
+    const receivingStatus = calc.receiving_over_mr > 0
+        ? `<span style="color:#c53030; font-weight:700;">Over by ${calc.receiving_over_mr} units</span>`
+        : calc.receiving_shortage > 0
+            ? `<span style="color:#d97706; font-weight:700;">Still need ${calc.receiving_shortage} units</span>`
+            : `<span style="color:#16a34a; font-weight:700;">Matched</span>`;
+
+    const issuingStatus = calc.issuing_over_mr > 0
+        ? `<span style="color:#c53030; font-weight:700;">Over by ${calc.issuing_over_mr} units</span>`
+        : calc.issuing_shortage > 0
+            ? `<span style="color:#dc2626; font-weight:700;">Short by ${calc.issuing_shortage} units</span>`
+            : `<span style="color:#16a34a; font-weight:700;">Matched</span>`;
 
     content.innerHTML = `
         <strong>Work Order:</strong> ${product.work_order || 'N/A'}<br>
         <strong>Product:</strong> ${product.item || 'N/A'} (${product.colour || 'N/A'}) - ${product.size || 'N/A'}<br>
-        <strong>MR Quantity:</strong> ${product.mr_qty}<br>
-        <strong>Total Received + Issued:</strong> ${product.total_received + product.total_issued}<br>
-        <strong>Shortage:</strong> <span style="color: #d32f2f; font-weight: bold;">${shortage} units</span>
+        <strong>MR Quantity:</strong> ${calc.mr_qty}<br>
+        <strong>Receiving:</strong> ${calc.total_received} / ${calc.mr_qty} ${receivingStatus}<br>
+        <strong>Issuing:</strong> ${calc.total_issued} / ${calc.mr_qty} ${issuingStatus}<br>
+        <strong>Completion:</strong> ${calc.is_complete ? '<span style="color:#16a34a; font-weight:700;">Complete</span>' : '<span style="color:#c53030; font-weight:700;">Incomplete</span>'}
     `;
 
     alert.classList.add('show');
@@ -653,8 +672,16 @@ function loadIncompleteWorkOrders() {
                                     ${order.total_issued}
                                 </div>
                                 <div class="incomplete-item-detail">
-                                    <span class="incomplete-item-detail-label" style="color: var(--danger);">Shortage:</span>
-                                    <span style="color: var(--danger); font-weight: bold;">${order.shortage}</span>
+                                    <span class="incomplete-item-detail-label" style="color: var(--danger);">Receiving:</span>
+                                    <span style="color: var(--danger); font-weight: bold;">
+                                        ${order.receiving_over_mr > 0 ? `Over by ${order.receiving_over_mr}` : order.receiving_shortage > 0 ? `Short by ${order.receiving_shortage}` : 'Matched'}
+                                    </span>
+                                </div>
+                                <div class="incomplete-item-detail">
+                                    <span class="incomplete-item-detail-label" style="color: var(--danger);">Issuing:</span>
+                                    <span style="color: var(--danger); font-weight: bold;">
+                                        ${order.issuing_over_mr > 0 ? `Over by ${order.issuing_over_mr}` : order.issuing_shortage > 0 ? `Short by ${order.issuing_shortage}` : 'Matched'}
+                                    </span>
                                 </div>
                             </div>
                         </div>

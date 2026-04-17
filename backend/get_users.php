@@ -23,7 +23,7 @@ if (!isset($_SESSION['user']) || ($_SESSION['role'] ?? '') !== 'admin') {
 }
 
 try {
-    $stmt = $conn->prepare("SELECT id, username, role FROM users ORDER BY id DESC");
+    $stmt = $conn->prepare("SELECT id, username, role, created_at FROM users ORDER BY id DESC");
     $stmt->execute();
     $result = $stmt->get_result();
     

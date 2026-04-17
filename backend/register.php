@@ -1,17 +1,17 @@
 <?php
 /**
- * User Registration API
+ * User Registration API - DISABLED
  * 
- * Securely handles creating new user accounts.
- * Now restricted to Admins only.
+ * This endpoint is disabled. User registration is only available through
+ * the Admin Panel (Dashboard > Users > Create User).
+ * 
+ * Only admins can create new user accounts via create_user.php
  */
 session_start();
 include "db.php";
 
-// 1. Check if the logged-in user is an Admin
-if (!isset($_SESSION['user']) || ($_SESSION['role'] ?? '') !== 'admin') {
-    die("error: unauthorized access");
-}
+// REGISTRATION IS DISABLED - Only admins can create users through Dashboard
+die("error: registration disabled - use admin panel to create users");
 
 $username = $_POST['username'] ?? null;
 $password = $_POST['password'] ?? null;
@@ -20,6 +20,14 @@ $role = $_POST['role'] ?? 'user'; // Default role is user if not specified
 if (!$username || !$password) {
     die("error: missing credentials");
 }
+
+// Validate password strength
+if (strlen($password) < 6) {
+    die("error: password must be at least 6 characters");
+}
+
+// Hash the password for security
+$hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
 // 2. Validate role
 $allowed_roles = ['user', 'admin'];
@@ -36,9 +44,9 @@ $result = $stmt->get_result();
 if ($result->num_rows > 0) {
     echo "exists";
 } else {
-    // 4. Insert new user with role
+    // 4. Insert new user with role and hashed password
     $stmt_insert = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-    $stmt_insert->bind_param("sss", $username, $password, $role);
+    $stmt_insert->bind_param("sss", $username, $hashedPassword, $role);
     
     if ($stmt_insert->execute()) {
         echo "success";

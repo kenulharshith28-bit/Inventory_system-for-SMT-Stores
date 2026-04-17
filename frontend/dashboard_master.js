@@ -1,53 +1,171 @@
 /**
- * Stores System - Dashboard Logic
+ * Stores System - Comprehensive Dashboard Logic
+ * Handles Work Orders, Master Data, Charts, and UI Navigation
  */
 
 let trendsChart, statusChart, lastData = [];
+let backupCountdownTimer = null;
+let hourlyBackupTimer = null;
 
+const HOURLY_BACKUP_LOCK_KEY = "stores:lastHourlyBackupHour";
+
+// Helper: Normalize status string for CSS classes
 function normalizeStatus(status) {
     return String(status || "").trim().toLowerCase();
 }
 
+// Helper: Convert status to Title Case for display
 function toTitleStatus(status) {
     const value = normalizeStatus(status);
     return value ? value.charAt(0).toUpperCase() + value.slice(1) : "Created";
 }
 
+// Helper: Format date to YYYY-MM-DD in local time
+function toLocalDateString(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function getNextHourlyBackupTime(now = new Date()) {
+    const next = new Date(now);
+    next.setHours(next.getHours() + 1, 0, 0, 0);
+    return next;
+}
+
+function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map(part => String(part).padStart(2, "0")).join(":");
+}
+
+function updateBackupCountdown() {
+    const valueEl = document.getElementById("backupCountdownValue");
+    const nextEl = document.getElementById("backupCountdownNext");
+    if (!valueEl || !nextEl) return;
+
+    const now = new Date();
+    const nextBackup = getNextHourlyBackupTime(now);
+    const remaining = nextBackup.getTime() - now.getTime();
+
+    valueEl.textContent = formatDuration(remaining);
+    nextEl.textContent = `Next backup at ${nextBackup.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+    })}`;
+}
+
+function startBackupCountdown() {
+    updateBackupCountdown();
+
+    if (backupCountdownTimer) {
+        clearInterval(backupCountdownTimer);
+    }
+
+    backupCountdownTimer = setInterval(updateBackupCountdown, 1000);
+}
+
+function getCurrentBackupHourKey(date = new Date()) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const h = String(date.getHours()).padStart(2, "0");
+    return `${y}-${m}-${d} ${h}`;
+}
+
+async function runHourlyBackup() {
+    const hourKey = getCurrentBackupHourKey();
+
+    try {
+        const lastRunHour = localStorage.getItem(HOURLY_BACKUP_LOCK_KEY);
+        if (lastRunHour === hourKey) {
+            return;
+        }
+
+        // Claim this hour before the request to avoid duplicate triggers across tabs.
+        localStorage.setItem(HOURLY_BACKUP_LOCK_KEY, hourKey);
+
+        const response = await fetch("../backend/backup_automation.php?format=json", {
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || "Backup failed");
+        }
+
+        console.log("Hourly backup completed:", result);
+    } catch (error) {
+        console.error("Hourly backup failed:", error);
+        // Clear the lock so the next scheduled attempt can retry this hour.
+        if (localStorage.getItem(HOURLY_BACKUP_LOCK_KEY) === hourKey) {
+            localStorage.removeItem(HOURLY_BACKUP_LOCK_KEY);
+        }
+    }
+}
+
+function scheduleHourlyBackup() {
+    if (hourlyBackupTimer) {
+        clearTimeout(hourlyBackupTimer);
+    }
+
+    const now = new Date();
+    const nextBackup = getNextHourlyBackupTime(now);
+    const delay = Math.max(1000, nextBackup.getTime() - now.getTime());
+
+    hourlyBackupTimer = setTimeout(async () => {
+        await runHourlyBackup();
+        scheduleHourlyBackup();
+    }, delay);
+}
+
+/**
+ * Initialization on Page Load
+ */
 document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("trendsChart")) {
-        const workDate = document.getElementById("work_date");
-        if (workDate && !workDate.value) {
-            workDate.value = toLocalDateString(new Date());
+        // Set default date to today for the new work order form
+        const workDateInput = document.getElementById("work_date");
+        if (workDateInput && !workDateInput.value) {
+            workDateInput.value = toLocalDateString(new Date());
         }
+        
+        startBackupCountdown();
+        scheduleHourlyBackup();
         initCharts();
-        loadMasterData();
-        loadMasterDataTable();
-        loadTable();
-        showSection("home");
+        loadMasterData();     // Load dropdowns
+        loadMasterDataTable(); // Load master data management table
+        loadTable();          // Load main work orders table
+        
+        // Ensure home section is shown
+        if (typeof showSection === 'function') {
+            showSection("home");
+        }
     }
 });
 
 /**
- * Compatibility alias for loadCustomers
+ * Master Data Management
  */
-function loadCustomers() {
-    loadMasterData();
-}
 
+// Fetch master data of a specific type (customer, item, size)
 function fetchMasterData(type) {
     console.log(`Fetching master data for type: ${type}`);
-    
     return fetch(`../backend/get_master_data.php?type=${encodeURIComponent(type)}`)
         .then(res => {
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             return res.json();
         })
         .then(data => {
-            console.log(`Data fetched for ${type}:`, data);
-            
-            // Ensure data is an array
             if (!Array.isArray(data)) {
                 console.warn(`Data for ${type} is not an array:`, data);
                 return [];
@@ -60,96 +178,61 @@ function fetchMasterData(type) {
         });
 }
 
+// Load all master data and populate UI elements
 function loadMasterData(selections = {}) {
-    console.log("Loading master data...");
+    console.log("Loading all master data...");
     
-    Promise.all([
+    return Promise.all([
         fetchMasterData("customer"),
         fetchMasterData("item"),
         fetchMasterData("size")
     ])
-        .then(([customers, items, sizes]) => {
-            console.log("Master data loaded:", { customers, items, sizes });
-            
-            // Populate selects in "New" section (may or may not exist)
-            if (document.getElementById("name")) {
-                populateSelect("name", customers, "Select customer", selections.name || "");
-            }
-            if (document.getElementById("edit_name")) {
-                populateSelect("edit_name", customers, "Select customer", selections.edit_name || "");
-            }
-            if (document.getElementById("item")) {
-                populateSelect("item", items, "Select item", selections.item || "");
-            }
-            if (document.getElementById("edit_item")) {
-                populateSelect("edit_item", items, "Select item", selections.edit_item || "");
-            }
-            if (document.getElementById("size")) {
-                populateSelect("size", sizes, "Select size", selections.size || "");
-            }
-            if (document.getElementById("edit_size")) {
-                populateSelect("edit_size", sizes, "Select size", selections.edit_size || "");
-            }
+    .then(([customers, items, sizes]) => {
+        // Populate dropdowns in New and Edit forms
+        populateSelect("name", customers, "Select customer", selections.name || "");
+        populateSelect("edit_name", customers, "Select customer", selections.edit_name || "");
+        populateSelect("item", items, "Select item", selections.item || "");
+        populateSelect("edit_item", items, "Select item", selections.edit_item || "");
+        populateSelect("size", sizes, "Select size", selections.size || "");
+        populateSelect("edit_size", sizes, "Select size", selections.edit_size || "");
 
-            // Update the master list views (in Master Data section)
-            renderMasterList("customerList", customers, "No customers added yet");
-            renderMasterList("itemList", items, "No items added yet");
-            renderMasterList("sizeList", sizes, "No sizes added yet");
-            
-            console.log("Master data populated successfully");
-        })
-        .catch(err => {
-            console.error("Master data load error:", err);
-            alert(`❌ Error loading master data: ${err.message}`);
-        });
+        // Update the chips/lists in Master Data management section
+        renderMasterList("customerList", customers, "No customers added yet");
+        renderMasterList("itemList", items, "No items added yet");
+        renderMasterList("sizeList", sizes, "No sizes added yet");
+    })
+    .catch(err => console.error("Master data load error:", err));
 }
 
+// Populate a select element with values
 function populateSelect(selectId, values, placeholder, selectedValue = "") {
     const select = document.getElementById(selectId);
-    if (!select) {
-        console.warn(`Select element not found: ${selectId}`);
-        return;
+    if (!select) return;
+
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+    
+    const optionValues = Array.isArray(values) ? [...values] : [];
+    
+    // Ensure selected value is present even if it's not in the master list currently
+    if (selectedValue && !optionValues.includes(selectedValue)) {
+        optionValues.push(selectedValue);
+        optionValues.sort((a, b) => a.localeCompare(b));
     }
 
-    try {
-        select.innerHTML = `<option value="">${placeholder}</option>`;
-        
-        // Ensure values is an array
-        if (!Array.isArray(values)) {
-            console.warn(`Values for ${selectId} is not an array:`, values);
-            return;
-        }
-        
-        const optionValues = [...values];
-        
-        // Add selected value if it's not already in the list
-        if (selectedValue && !optionValues.includes(selectedValue)) {
-            optionValues.push(selectedValue);
-            optionValues.sort((a, b) => a.localeCompare(b));
-        }
-
-        optionValues.forEach(value => {
-            if (value) { // Skip empty values
-                const option = document.createElement("option");
-                option.value = value;
-                option.textContent = value;
-                option.selected = value === selectedValue;
-                select.appendChild(option);
-            }
-        });
-        
-        console.log(`Select ${selectId} populated with ${optionValues.length} options`);
-    } catch (err) {
-        console.error(`Error populating select ${selectId}:`, err);
-    }
+    optionValues.forEach(value => {
+        if (!value) return;
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        option.selected = (value === selectedValue);
+        select.appendChild(option);
+    });
 }
 
+// Render chips for master data lists
 function renderMasterList(listId, values, emptyLabel) {
     const list = document.getElementById(listId);
-    if (!list) {
-        console.error(`List element not found: ${listId}`);
-        return;
-    }
+    if (!list) return;
 
     list.innerHTML = "";
 
@@ -158,31 +241,24 @@ function renderMasterList(listId, values, emptyLabel) {
         return;
     }
 
-    const typeMap = {
-        customerList: "customer",
-        itemList: "item",
-        sizeList: "size"
-    };
+    const typeMap = { customerList: "customer", itemList: "item", sizeList: "size" };
     const type = typeMap[listId];
 
     values.forEach(value => {
         const chip = document.createElement("span");
         chip.className = "customer-chip";
         
-        const deleteBtn = document.createElement("span");
-        deleteBtn.className = "chip-delete";
-        deleteBtn.dataset.type = type;
-        deleteBtn.dataset.value = value;
-        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
-        deleteBtn.style.cursor = "pointer";
-        deleteBtn.onclick = function(e) {
-            e.stopPropagation();
-            deleteMasterData(this.dataset.type, this.dataset.value);
-        };
-        
         const textSpan = document.createElement("span");
         textSpan.textContent = value;
         textSpan.style.marginRight = "0.5rem";
+        
+        const deleteBtn = document.createElement("span");
+        deleteBtn.className = "chip-delete";
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteMasterData(type, value);
+        };
         
         chip.appendChild(textSpan);
         chip.appendChild(deleteBtn);
@@ -190,66 +266,18 @@ function renderMasterList(listId, values, emptyLabel) {
     });
 }
 
-function deleteMasterData(type, value) {
-    if (!confirm(`Are you sure you want to delete "${value}" from ${type}s?`)) return;
-
-    console.log(`Deleting ${type}: ${value}`);
-
-    const params = new URLSearchParams();
-    params.append("type", type);
-    params.append("value", value);
-
-    fetch("../backend/delete_master_data.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString()
-    })
-        .then(res => res.text())
-        .then(data => {
-            const response = data.trim();
-            console.log(`Delete response: ${response}`);
-            
-            if (response === "deleted") {
-                console.log(`${type} "${value}" deleted successfully`);
-                alert(`✓ ${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`);
-                
-                // Reload only the master data lists
-                reloadMasterDataLists();
-            } else {
-                console.error(`Delete error response: ${response}`);
-                alert(`❌ Error: ${response}`);
-            }
-        })
-        .catch(err => {
-            console.error(`Error deleting ${type}:`, err);
-            alert(`❌ Failed to delete ${type}. Error: ${err.message}`);
-        });
-}
-
+// Add new master data entry
 function addMasterData(type) {
-    const inputMap = {
-        customer: "new_customer_option",
-        item: "new_item_option",
-        size: "new_size_option"
-    };
-    
+    const inputMap = { customer: "new_customer_option", item: "new_item_option", size: "new_size_option" };
     const input = document.getElementById(inputMap[type]);
-    
-    if (!input) {
-        console.error(`Input element not found: ${inputMap[type]}`);
-        alert(`❌ Error: Input field not found for ${type}. This is a system error.`);
-        return;
-    }
+    if (!input) return;
     
     const value = input.value.trim();
-
     if (!value) {
-        alert(`⚠ Please enter a ${type} name first.`);
+        alert(`Please enter a ${type} name.`);
         input.focus();
         return;
     }
-
-    console.log(`Adding ${type}: ${value}`);
 
     const params = new URLSearchParams();
     params.append("type", type);
@@ -260,102 +288,561 @@ function addMasterData(type) {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString()
     })
-        .then(res => res.text())
+    .then(res => res.text())
+    .then(data => {
+        const response = data.trim();
+        if (response === "added") {
+            input.value = "";
+            alert(`✓ ${toTitleStatus(type)} added successfully!`);
+            reloadMasterDataLists();
+        } else if (response === "exists") {
+            alert(`ℹ This ${type} already exists.`);
+        } else {
+            alert(`❌ Error: ${data}`);
+        }
+    });
+}
+
+// Delete master data entry
+function deleteMasterData(type, value) {
+    if (!confirm(`Delete "${value}" from ${type}s?`)) return;
+
+    const params = new URLSearchParams();
+    params.append("type", type);
+    params.append("value", value);
+
+    fetch("../backend/delete_master_data.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+    })
+    .then(res => res.text())
+    .then(data => {
+        if (data.trim() === "deleted") {
+            alert(`✓ Deleted successfully!`);
+            reloadMasterDataLists();
+        } else {
+            alert(`❌ Error: ${data}`);
+        }
+    });
+}
+
+// Refresh all master data UI components
+function reloadMasterDataLists() {
+    loadMasterData();
+    loadMasterDataTable();
+}
+
+/**
+ * Main Dashboard Functions (Table & Charts)
+ */
+
+function initCharts() {
+    const ctxTrends = document.getElementById("trendsChart")?.getContext("2d");
+    const ctxStatus = document.getElementById("statusChart")?.getContext("2d");
+    if (!ctxTrends || !ctxStatus) return;
+
+    // Destroy existing charts if they exist (to avoid Chart.js errors on re-init)
+    if (trendsChart instanceof Chart) trendsChart.destroy();
+    if (statusChart instanceof Chart) statusChart.destroy();
+
+    trendsChart = new Chart(ctxTrends, {
+        type: "line",
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: "Pending",
+                    data: [],
+                    borderColor: "#f6c23e",
+                    backgroundColor: "transparent",
+                    fill: false,
+                    tension: 0.35,
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: "#f6c23e",
+                    pointBorderColor: "#f6c23e"
+                },
+                {
+                    label: "Done",
+                    data: [],
+                    borderColor: "#4e73df",
+                    backgroundColor: "transparent",
+                    fill: false,
+                    tension: 0.35,
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: "#4e73df",
+                    pointBorderColor: "#4e73df"
+                }
+            ]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 4,
+                    right: 6,
+                    bottom: 0,
+                    left: 0
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: "top",
+                    align: "end",
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: "circle",
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        padding: 12,
+                        color: "#6b7280",
+                        font: {
+                            size: 12,
+                            family: "Poppins"
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: "#111827",
+                    titleColor: "#fff",
+                    bodyColor: "#fff",
+                    padding: 12,
+                    cornerRadius: 10
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: 1,
+                    grid: {
+                        color: "#e5e7eb"
+                    },
+                    ticks: {
+                        stepSize: 1,
+                        precision: 0,
+                        color: "#6b7280",
+                        font: {
+                            size: 11,
+                            family: "Poppins"
+                        }
+                    },
+                    border: {
+                        color: "#d1d5db"
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        color: "#6b7280",
+                        font: {
+                            size: 11,
+                            family: "Poppins"
+                        }
+                    },
+                    border: {
+                        color: "#d1d5db"
+                    }
+                }
+            }
+        }
+    });
+
+    statusChart = new Chart(ctxStatus, {
+        type: "doughnut",
+        data: {
+            labels: ["Pending", "Done"],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: ["#f6c23e", "#4e73df"],
+                hoverBackgroundColor: ["#f4b619", "#3751c8"],
+                borderWidth: 0,
+                cutout: "80%"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: "top",
+                    align: "end",
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: "circle",
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        padding: 10,
+                        color: "#6b7280",
+                        font: {
+                            size: 12,
+                            family: "Poppins"
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function loadWorkRows(range, fallbackToAll = true) {
+    return fetch(`../backend/get_work.php?range=${encodeURIComponent(range)}`)
+        .then(res => res.json())
         .then(data => {
-            const response = data.trim();
-            console.log(`Add response: ${response}`);
-            
-            if (response === "added") {
-                console.log(`${type} "${value}" added successfully`);
-                input.value = "";
-                input.focus();
-                
-                alert(`✓ ${type.charAt(0).toUpperCase() + type.slice(1)} added successfully!`);
-                
-                // Reload only the master data lists
-                reloadMasterDataLists();
-            } else if (response === "exists") {
-                console.log(`${type} "${value}" already exists`);
-                alert(`ℹ This ${type} already exists in the database.`);
-                input.value = "";
-                input.focus();
-            } else {
-                console.error(`Unexpected response: ${response}`);
-                alert(`❌ Error: ${response}`);
+            if (Array.isArray(data) && data.length === 0 && fallbackToAll && range !== "all") {
+                return loadWorkRows("all", false);
+            }
+            return data;
+        });
+}
+
+function loadShortageRows() {
+    return fetch("../backend/get_work_with_shortage.php")
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data)) return data;
+            if (data && data.success && Array.isArray(data.data)) return data.data;
+            return [];
+        });
+}
+
+function loadTrendRows(range, fallbackToAll = true) {
+    return fetch(`../backend/get_chart_data.php?range=${encodeURIComponent(range)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data) && data.length === 0 && fallbackToAll && range !== "all") {
+                return loadTrendRows("all", false);
+            }
+            return data;
+        });
+}
+
+function loadTable() {
+    loadShortageRows()
+        .then(data => {
+            const shortageRows = Array.isArray(data) ? data : [];
+            lastData = shortageRows;
+
+            const pendingCount = shortageRows.length;
+            updateStats(pendingCount, pendingCount, 0);
+            if (statusChart) {
+                statusChart.data.datasets[0].data = [pendingCount, 0];
+                statusChart.update();
+            }
+            renderTable(shortageRows);
+        })
+        .catch(err => {
+            console.error("Load table error:", err);
+            const tableBody = document.getElementById("tableBody");
+            if (tableBody) {
+                tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #c53030;">Failed to load shortage work orders from database</td></tr>`;
+            }
+        });
+
+    const rangeSelect = document.getElementById("timeRangeSelect");
+    const range = rangeSelect ? rangeSelect.value : "7days";
+
+    loadTrendRows(range)
+        .then(chartData => {
+            if (trendsChart) {
+                trendsChart.data.labels = chartData.map(d => d.date);
+                trendsChart.data.datasets[0].data = chartData.map(d => d.pending);
+                trendsChart.data.datasets[1].data = chartData.map(d => d.done);
+                trendsChart.update();
             }
         })
         .catch(err => {
-            console.error(`Error adding ${type}:`, err);
-            alert(`❌ Failed to add ${type}. Error: ${err.message}`);
+            console.error("Load chart error:", err);
         });
 }
 
-function reloadMasterDataLists() {
-    console.log("Reloading master data lists...");
-    
-    Promise.all([
-        fetchMasterData("customer"),
-        fetchMasterData("item"),
-        fetchMasterData("size")
-    ])
-        .then(([customers, items, sizes]) => {
-            console.log("Master data fetched:", { customers, items, sizes });
-            
-            // Update the lists in master section
-            renderMasterList("customerList", customers, "No customers added yet");
-            renderMasterList("itemList", items, "No items added yet");
-            renderMasterList("sizeList", sizes, "No sizes added yet");
-            
-            // Also update dropdowns if they exist (in New Work section)
-            populateSelect("name", customers, "Select customer", "");
-            populateSelect("edit_name", customers, "Select customer", "");
-            populateSelect("item", items, "Select item", "");
-            populateSelect("edit_item", items, "Select item", "");
-            populateSelect("size", sizes, "Select size", "");
-            populateSelect("edit_size", sizes, "Select size", "");
-            
-            // Reload the master data database table
-            loadMasterDataTable();
-            
-            console.log("Master data lists reloaded successfully");
-        })
-        .catch(err => {
-            console.error("Error reloading master data:", err);
-            alert(`❌ Error reloading data: ${err.message}`);
-        });
-}
+function groupShortageWorkOrders(rows) {
+    const groups = new Map();
 
-function toggleAuth(mode) {
-    const loginSection = document.getElementById("loginSection");
-    const registerSection = document.getElementById("registerSection");
-    if (loginSection && registerSection) {
-        loginSection.style.display = mode === "register" ? "none" : "block";
-        registerSection.style.display = mode === "register" ? "block" : "none";
-    }
-}
+    rows.forEach(row => {
+        const workOrder = row.work_order;
+        if (!workOrder) return;
 
-function socialAlert(feature) {
-    if (feature === "Password recovery") {
-        const email = prompt("Please enter your registered email address:");
-        if (email) {
-            alert(`A password reset link has been sent to ${email} (Mock Action).`);
+        const existing = groups.get(workOrder) || {
+            id: row.id,
+            customer_name: row.customer_name,
+            work_order: row.work_order,
+            mrn_no: row.mrn_no,
+            cut_qty: row.cut_qty,
+            location: row.location,
+            work_date: row.work_date,
+            status: row.status,
+            product_id: row.product_id,
+            item_code: row.item_code,
+            item: row.item,
+            colour: row.colour,
+            size: row.size,
+            unit: row.unit,
+            mr_qty: row.mr_qty,
+            total_received: 0,
+            total_issued: 0,
+            receiving_over_mr: 0,
+            receiving_shortage: 0,
+            issuing_shortage: 0,
+            issuing_over_mr: 0,
+            product_count: 0,
+            item_summary: [],
+            hasShortage: false,
+            hasActiveShortage: false,
+            shortestStatus: ""
+        };
+
+        existing.product_count += 1;
+        existing.total_received += parseInt(row.total_received) || 0;
+        existing.total_issued += parseInt(row.total_issued) || 0;
+        existing.receiving_over_mr = Math.max(existing.receiving_over_mr, parseInt(row.receiving_over_mr) || 0);
+        existing.receiving_shortage = Math.max(existing.receiving_shortage, parseInt(row.receiving_shortage) || 0);
+        existing.issuing_shortage = Math.max(existing.issuing_shortage, parseInt(row.issuing_shortage) || 0);
+        existing.issuing_over_mr = Math.max(existing.issuing_over_mr, parseInt(row.issuing_over_mr) || 0);
+        existing.hasShortage = existing.hasShortage || !!row.hasShortage;
+        existing.hasActiveShortage = existing.hasActiveShortage || (!!row.hasShortage && !row.shortage_ignored);
+
+        const itemLabel = [row.item, row.colour, row.size].filter(Boolean).join(" / ");
+        if (itemLabel && !existing.item_summary.includes(itemLabel)) {
+            existing.item_summary.push(itemLabel);
         }
-    } else {
-        alert(`${feature} is currently under development.`);
+
+        groups.set(workOrder, existing);
+    });
+
+    return Array.from(groups.values())
+        .filter(row => row.hasActiveShortage)
+        .sort((a, b) => {
+            const aDate = a.work_date || "";
+            const bDate = b.work_date || "";
+            return bDate.localeCompare(aDate);
+        })
+        .map(row => ({
+            ...row,
+            item_summary: row.item_summary.join(", ")
+        }));
+}
+
+function updateStats(total, pending, done) {
+    if (document.getElementById("total")) document.getElementById("total").innerText = total;
+    if (document.getElementById("pending")) document.getElementById("pending").innerText = pending;
+    if (document.getElementById("done")) document.getElementById("done").innerText = done;
+    
+    const percent = total > 0 ? Math.round((pending / total) * 100) : 0;
+    if (document.getElementById("pendingPercent")) document.getElementById("pendingPercent").innerText = `${percent}%`;
+}
+
+function renderTable(data) {
+    const tableBody = document.getElementById("tableBody");
+    if (!tableBody) return;
+    tableBody.innerHTML = "";
+
+    if (!data || data.length === 0) {
+        tableBody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding: 2rem; color: #a0aec0;'>No shortage work orders found</td></tr>";
+        return;
     }
+
+    data.forEach(row => {
+        const tr = document.createElement("tr");
+        const statusClass = "pending";
+        
+        const receivingStatus = row.receiving_over_mr > 0
+            ? `Receiving: Over by ${row.receiving_over_mr}`
+            : row.receiving_shortage > 0
+                ? `Receiving: Short by ${row.receiving_shortage}`
+                : `Receiving: Matched`;
+
+        const issuingStatus = row.issuing_over_mr > 0
+            ? `Issuing: Over by ${row.issuing_over_mr}`
+            : row.issuing_shortage > 0
+                ? `Issuing: Short by ${row.issuing_shortage}`
+                : `Issuing: Matched`;
+
+        tr.innerHTML = `
+            <td style="font-family: monospace; font-weight: 600; color: #5a67d8;">${row.work_order || "-"}</td>
+            <td style="font-weight: 500;">${row.customer_name || "-"}</td>
+            <td>
+                ${row.item_summary || row.item || "-"}
+                ${row.product_count > 1 ? `<div style="font-size: 0.75rem; color: #94a3b8;">${row.product_count} products</div>` : ""}
+            </td>
+            <td>${row.mrn_no || "-"}</td>
+            <td style="font-family: monospace; font-size: 0.85rem;">${row.work_date || "-"}</td>
+            <td>
+                <span class="status-badge ${statusClass}">Shortage</span>
+                <div class="shortage-note warning"><i class="fas fa-exclamation-circle"></i> ${receivingStatus}</div>
+                <div class="shortage-note danger"><i class="fas fa-exclamation-triangle"></i> ${issuingStatus}</div>
+            </td>
+            <td>
+                <button class="btn-icon delete" onclick="ignoreWorkOrderShortage('${row.work_order}')">
+                    <i class="fas fa-ban"></i> Ignore
+                </button>
+            </td>
+        `;
+        tableBody.appendChild(tr);
+    });
+}
+
+/**
+ * Work Order Operations
+ */
+
+function deleteWork(id) {
+    if (!confirm("Delete this entire work order and its products?")) return;
+    fetch(`../backend/delete_work.php?id=${id}`)
+        .then(res => res.text())
+        .then(data => {
+            if (data.trim() === "deleted") loadTable();
+            else alert("Error: " + data);
+        });
+}
+
+function ignoreWorkOrderShortage(workOrder) {
+    if (!workOrder) return;
+    if (!confirm(`Ignore shortage for work order "${workOrder}"?`)) return;
+
+    const params = new URLSearchParams();
+    params.append("work_order", workOrder);
+
+    fetch("../backend/ignore_work_order_shortage.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            loadTable();
+        } else {
+            alert("Error: " + (data.error || "Failed to ignore shortage"));
+        }
+    })
+    .catch(err => {
+        alert("Error: " + err.message);
+    });
+}
+
+async function prepareEdit(row) {
+    document.getElementById("display_id").innerText = row.work_order || row.id;
+    document.getElementById("edit_id").value = row.id;
+    document.getElementById("edit_product_id").value = row.product_id || "";
+
+    showSection("edit");
+
+    const loadingMessage = document.getElementById("editLoadingMessage");
+    if (loadingMessage) {
+        loadingMessage.style.display = "block";
+        loadingMessage.textContent = "Loading work order from database...";
+    }
+
+    try {
+        const workOrder = row.work_order || "";
+        if (!workOrder) {
+            throw new Error("Work order not found");
+        }
+
+        const response = await fetch(`../backend/get_work.php?work_order=${encodeURIComponent(workOrder)}`);
+        const details = await response.json();
+
+        if (!Array.isArray(details) || details.length === 0) {
+            throw new Error("No matching work order records found in database");
+        }
+
+        const selectedProduct = row.product_id
+            ? details.find(item => String(item.product_id) === String(row.product_id))
+            : details[0];
+        const productRow = selectedProduct || details[0];
+        const headerRow = details[0];
+
+        await loadMasterData({
+            edit_name: headerRow.customer_name || "",
+            edit_item: productRow.item || "",
+            edit_size: productRow.size || ""
+        });
+
+        document.getElementById("edit_work_order").value = headerRow.work_order || "";
+        document.getElementById("edit_mrn_no").value = headerRow.mrn_no || "";
+        document.getElementById("edit_cut_qty").value = headerRow.cut_qty || "";
+        document.getElementById("edit_location").value = headerRow.location || "";
+        document.getElementById("edit_work_date").value = headerRow.work_date || "";
+        document.getElementById("edit_status").value = normalizeStatus(headerRow.status) || "created";
+        document.getElementById("edit_item_code").value = productRow.item_code || "";
+        document.getElementById("edit_colour").value = productRow.colour || "";
+        document.getElementById("edit_unit").value = productRow.unit || "Pcs";
+        document.getElementById("edit_mr_qty").value = productRow.mr_qty || "";
+        document.getElementById("edit_product_id").value = productRow.product_id || row.product_id || "";
+    } catch (error) {
+        console.error("Failed to load edit data:", error);
+        if (loadingMessage) {
+            loadingMessage.textContent = `Failed to load work order: ${error.message}`;
+        }
+        alert(`Could not load work order details: ${error.message}`);
+    } finally {
+        if (loadingMessage) {
+            loadingMessage.style.display = "none";
+        }
+    }
+}
+
+function updateWork() {
+    const params = new URLSearchParams();
+    const fields = ["id", "product_id", "customer_name", "mrn_no", "cut_qty", "location", "work_date", "status", "item_code", "item", "colour", "size", "unit", "mr_qty"];
+    fields.forEach(f => {
+        const el = document.getElementById("edit_" + f);
+        if (el) params.append(f, el.value);
+    });
+
+    fetch("../backend/update_work.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+    })
+    .then(res => res.text())
+    .then(data => {
+        if (data.trim() === "updated") {
+            alert("✓ Updated successfully!");
+            showSection("home");
+            loadTable();
+        } else {
+            alert("Error: " + data);
+        }
+    });
+}
+
+/**
+ * Navigation & User Auth
+ */
+
+function showSection(section) {
+    document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
+    document.querySelectorAll(".content-section").forEach(panel => panel.classList.add("content-hidden"));
+
+    const target = document.getElementById(section + "Section");
+    const nav = document.getElementById("nav-" + section);
+    if (target) target.classList.remove("content-hidden");
+    if (nav) nav.classList.add("active");
+
+    // Dynamic section loading
+    if (section === "home") loadTable();
+    if (section === "master") reloadMasterDataLists();
+    if (section === "users" && typeof loadUsers === "function") loadUsers();
+    if (section === "receivingIssuing" && typeof initializeReceivingIssuing === "function") initializeReceivingIssuing();
 }
 
 function login() {
     const user = document.getElementById("username").value;
     const pass = document.getElementById("password").value;
-
     if (!user || !pass) {
-        if (document.getElementById("error")) {
-            document.getElementById("error").innerText = "Please fill all fields";
-        }
+        if (document.getElementById("error")) document.getElementById("error").innerText = "Fill all fields";
         return;
     }
-
     const params = new URLSearchParams();
     params.append("username", user);
     params.append("password", pass);
@@ -365,493 +852,201 @@ function login() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString()
     })
-        .then(res => res.text())
-        .then(data => {
-            if (data.trim() === "success") {
-                window.location.href = "dashboard.html";
-            } else if (document.getElementById("error")) {
-                document.getElementById("error").innerText = "Invalid username or password";
-            }
-        })
-        .catch(err => {
-            console.error("Login error:", err);
-            if (document.getElementById("error")) {
-                document.getElementById("error").innerText = "Connection error. Please try again.";
-            }
-        });
-}
-
-function showSection(section) {
-    console.log(`Showing section: ${section}`);
-    
-    // Security check for master section
-    if (section === "master" && currentUser && currentUser.role !== 'admin') {
-        alert("Access Denied: Admin role required.");
-        section = "home";
-    }
-
-    // Security check for users section
-    if (section === "users" && currentUser && currentUser.role !== 'admin') {
-        alert("Access Denied: Admin role required.");
-        section = "home";
-    }
-
-    document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
-    document.querySelectorAll(".content-section").forEach(panel => panel.classList.add("content-hidden"));
-
-    if (section === "home") {
-        document.getElementById("homeSection").classList.remove("content-hidden");
-        document.getElementById("nav-home").classList.add("active");
-    } else if (section === "new") {
-        document.getElementById("newSection").classList.remove("content-hidden");
-        document.getElementById("nav-new").classList.add("active");
-    } else if (section === "master") {
-        document.getElementById("masterSection").classList.remove("content-hidden");
-        document.getElementById("nav-master").classList.add("active");
-        // Refresh master data when section is opened
-        console.log("Master section opened - loading fresh data and table");
-        loadMasterData();
-        loadMasterDataTable();
-    } else if (section === "edit") {
-        document.getElementById("editSection").classList.remove("content-hidden");
-        document.getElementById("nav-edit").classList.add("active");
-    } else if (section === "receivingIssuing") {
-        document.getElementById("receivingIssuingSection").classList.remove("content-hidden");
-        document.getElementById("nav-receivingIssuing").classList.add("active");
-        if (typeof initializeReceivingIssuing === "function") {
-            initializeReceivingIssuing();
-        }
-    } else if (section === "users") {
-        document.getElementById("usersSection").classList.remove("content-hidden");
-        document.getElementById("nav-users").classList.add("active");
-        // Load users when section is opened
-        if (typeof loadUsers === "function") {
-            loadUsers();
-        }
-    }
-}
-
-function initCharts() {
-    const ctxTrends = document.getElementById("trendsChart").getContext("2d");
-    const ctxStatus = document.getElementById("statusChart").getContext("2d");
-
-    trendsChart = new Chart(ctxTrends, {
-        type: "line",
-        data: {
-            labels: [],
-            datasets: [{
-                label: "Open",
-                data: [],
-                borderColor: "#f6c23e",
-                backgroundColor: "rgba(246, 194, 62, 0.1)",
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: "#f6c23e"
-            }, {
-                label: "Done",
-                data: [],
-                borderColor: "#4e73df",
-                backgroundColor: "rgba(78, 115, 223, 0.1)",
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: "#4e73df"
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: "top", align: "end", labels: { usePointStyle: true, boxWidth: 6, font: { size: 11 } } }
-            },
-            scales: {
-                y: { beginAtZero: true, grid: { color: "#f0f0f0" }, ticks: { stepSize: 1, font: { size: 11 } } },
-                x: { grid: { display: false }, ticks: { font: { size: 11 } } }
-            }
-        }
-    });
-
-    statusChart = new Chart(ctxStatus, {
-        type: "doughnut",
-        data: {
-            labels: ["Open", "Done"],
-            datasets: [{
-                data: [0, 0],
-                backgroundColor: ["#f6c23e", "#1cc88a"],
-                hoverBackgroundColor: ["#f4b619", "#17a673"],
-                borderWidth: 0,
-                cutout: "80%"
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } }
-        }
-    });
-}
-
-function loadTable() {
-    const range = document.getElementById("timeRangeSelect") ? document.getElementById("timeRangeSelect").value : "7days";
-
-    fetch(`../backend/get_work.php?range=${range}`)
-        .then(res => res.json())
-        .then(data => {
-            lastData = data;
-
-            const openCount = data.filter(row => normalizeStatus(row.status) !== "done").length;
-            const doneCount = data.filter(row => normalizeStatus(row.status) === "done").length;
-            updateStats(data.length, openCount, doneCount);
-            statusChart.data.datasets[0].data = [openCount, doneCount];
-            statusChart.update();
-
-            renderTable(data);
-        });
-
-    fetch(`../backend/get_chart_data.php?range=${range}`)
-        .then(res => res.json())
-        .then(chartData => {
-            updateTrendChart(chartData);
-        })
-        .catch(err => console.error("Load error:", err));
-}
-
-function updateTrendChart(chartData) {
-    if (!trendsChart) return;
-
-    trendsChart.data.labels = chartData.map(d => d.date);
-    trendsChart.data.datasets[0].data = chartData.map(d => d.pending);
-    trendsChart.data.datasets[1].data = chartData.map(d => d.done);
-    trendsChart.update();
-}
-
-function updateStats(total, open, done) {
-    document.getElementById("total").innerText = total;
-    document.getElementById("pending").innerText = open;
-    document.getElementById("done").innerText = done;
-
-    const percent = total > 0 ? Math.round((open / total) * 100) : 0;
-    document.getElementById("pendingPercent").innerText = `${percent}%`;
-}
-
-function toLocalDateString(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-}
-
-function renderTable(data) {
-    const table = document.getElementById("tableBody");
-    table.innerHTML = "";
-
-    if (!data || data.length === 0) {
-        table.innerHTML = "<tr><td colspan='7' style='text-align:center; padding: 2rem; color: #a0aec0;'>No work orders found for this period</td></tr>";
-        return;
-    }
-
-    data.forEach(row => {
-        const tr = document.createElement("tr");
-        const statusClass = normalizeStatus(row.status);
-        
-        // Shortage display logic
-        let shortageBadge = "";
-        const mrQty = parseInt(row.mr_qty) || 0;
-        const totalReceived = parseInt(row.total_received) || 0;
-        const totalIssued = parseInt(row.total_issued) || 0;
-
-        if (statusClass !== 'done') {
-            // 1. Check if receiving doesn't match MR Qty
-            if (totalReceived !== mrQty) {
-                const diff = mrQty - totalReceived;
-                const label = diff > 0 ? `Receiving Short: ${diff}` : `Over Received: ${Math.abs(diff)}`;
-                shortageBadge += `
-                    <div style="margin-top: 0.25rem; font-size: 0.75rem; color: #f6993f; font-weight: 600; display: flex; align-items: center; gap: 4px;">
-                        <i class="fas fa-exclamation-circle"></i>
-                        ${label}
-                    </div>
-                `;
-            }
-
-            // 2. Check for issuing shortage
-            if (totalIssued < mrQty) {
-                const issueShortage = mrQty - totalIssued;
-                shortageBadge += `
-                    <div style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--danger); font-weight: 600; display: flex; align-items: center; gap: 4px;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        Issuing Short: ${issueShortage}
-                    </div>
-                `;
-            }
-        }
-
-        tr.innerHTML = `
-            <td style="font-family: monospace; font-weight: 600; color: #5a67d8;">${row.work_order || "-"}</td>
-            <td style="font-weight: 500;">${row.customer_name || "-"}</td>
-            <td>${row.item || "-"}</td>
-            <td>${row.mrn_no || "-"}</td>
-            <td style="font-family: monospace; font-weight: 500; color: #5a67d8;">${row.work_date || "No Date"}</td>
-            <td>
-                <span class="status-badge ${statusClass}">${toTitleStatus(row.status)}</span>
-                ${shortageBadge}
-            </td>
-            <td>
-                <div style="display: flex; gap: 0.5rem;">
-                    <button class="btn-icon" onclick="prepareEdit(${JSON.stringify(row).replace(/"/g, "&quot;")})" title="Edit Work Order">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-icon delete" onclick="deleteWork(${row.id})" title="Delete Work Order">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </td>
-        `;
-        table.appendChild(tr);
-    });
-}
-
-function addWork() {
-    const params = new URLSearchParams();
-    params.append("customer_name", document.getElementById("name").value);
-    params.append("work_order", document.getElementById("work_order").value);
-    params.append("mrn_no", document.getElementById("mrn_no").value);
-    params.append("cut_qty", document.getElementById("cut_qty").value);
-    params.append("location", document.getElementById("location").value);
-    params.append("work_date", document.getElementById("work_date").value);
-    params.append("status", document.getElementById("status").value);
-    params.append("item_code", document.getElementById("item_code").value);
-    params.append("item", document.getElementById("item").value);
-    params.append("colour", document.getElementById("colour").value);
-    params.append("size", document.getElementById("size").value);
-    params.append("unit", document.getElementById("unit").value);
-    params.append("mr_qty", document.getElementById("mr_qty").value);
-
-    if (!params.get("customer_name") || !params.get("work_order") || !params.get("item")) {
-        alert("Please provide Customer Name, Work Order, and Item.");
-        return;
-    }
-
-    fetch("../backend/add_work.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString()
-    })
-        .then(res => res.text())
-        .then(data => {
-            if (data.trim() === "added") {
-                document.getElementById("name").value = "";
-                document.getElementById("work_order").value = "";
-                document.getElementById("mrn_no").value = "";
-                document.getElementById("cut_qty").value = "";
-                document.getElementById("location").value = "";
-                document.getElementById("work_date").value = toLocalDateString(new Date());
-                document.getElementById("status").value = "created";
-                document.getElementById("item_code").value = "";
-                document.getElementById("item").value = "";
-                document.getElementById("colour").value = "";
-                document.getElementById("size").value = "";
-                document.getElementById("unit").value = "Pcs";
-                document.getElementById("mr_qty").value = "";
-                loadMasterData();
-                loadTable();
-                alert("New work order successfully saved.");
-            } else {
-                alert("Error: " + data);
-            }
-        });
-}
-
-function prepareEdit(row) {
-    document.getElementById("display_id").innerText = row.work_order || row.id;
-    document.getElementById("edit_id").value = row.id;
-    loadMasterData({
-        name: document.getElementById("name")?.value || "",
-        edit_name: row.customer_name || "",
-        item: document.getElementById("item")?.value || "",
-        edit_item: row.item || "",
-        size: document.getElementById("size")?.value || "",
-        edit_size: row.size || ""
-    });
-    document.getElementById("edit_work_order").value = row.work_order || "";
-    document.getElementById("edit_mrn_no").value = row.mrn_no || "";
-    document.getElementById("edit_cut_qty").value = row.cut_qty || "";
-    document.getElementById("edit_location").value = row.location || "";
-    document.getElementById("edit_work_date").value = row.work_date || "";
-    document.getElementById("edit_status").value = normalizeStatus(row.status) || "created";
-    document.getElementById("edit_item_code").value = row.item_code || "";
-    document.getElementById("edit_colour").value = row.colour || "";
-    document.getElementById("edit_unit").value = row.unit || "Pcs";
-    document.getElementById("edit_mr_qty").value = row.mr_qty || "";
-
-    showSection("edit");
-    document.getElementById("editForm").scrollIntoView({ behavior: "smooth" });
-}
-
-function updateWork() {
-    const params = new URLSearchParams();
-    params.append("id", document.getElementById("edit_id").value);
-    params.append("customer_name", document.getElementById("edit_name").value);
-    params.append("work_order", document.getElementById("edit_work_order").value);
-    params.append("mrn_no", document.getElementById("edit_mrn_no").value);
-    params.append("cut_qty", document.getElementById("edit_cut_qty").value);
-    params.append("location", document.getElementById("edit_location").value);
-    params.append("work_date", document.getElementById("edit_work_date").value);
-    params.append("status", document.getElementById("edit_status").value);
-    params.append("item_code", document.getElementById("edit_item_code").value);
-    params.append("item", document.getElementById("edit_item").value);
-    params.append("colour", document.getElementById("edit_colour").value);
-    params.append("size", document.getElementById("edit_size").value);
-    params.append("unit", document.getElementById("edit_unit").value);
-    params.append("mr_qty", document.getElementById("edit_mr_qty").value);
-
-    fetch("../backend/update_work.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString()
-    })
-        .then(res => res.text())
-        .then(data => {
-            if (data.trim() === "updated") {
-                showSection("home");
-                loadTable();
-                alert("Work order updated successfully.");
-            } else {
-                alert("Error: " + data);
-            }
-        });
-}
-
-function deleteWork(id) {
-    if (!confirm("Are you sure you want to delete this work order?")) return;
-
-    fetch("../backend/delete_work.php?id=" + id)
-        .then(res => res.text())
-        .then(data => {
-            if (data.trim() === "deleted") {
-                loadTable();
-            } else {
-                alert("Error deleting work order: " + data);
-            }
-        });
-}
-
-function searchWork() {
-    const val = document.getElementById("searchInput").value.toLowerCase();
-    const rows = document.querySelectorAll("#tableBody tr");
-    rows.forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(val) ? "" : "none";
+    .then(res => res.text())
+    .then(data => {
+        if (data.trim() === "success") window.location.href = "dashboard.html";
+        else if (document.getElementById("error")) document.getElementById("error").innerText = "Invalid credentials";
     });
 }
 
 function logout() {
-    fetch("../backend/logout.php").then(() => {
-        window.location.href = "login.html";
+    fetch("../backend/logout.php").then(() => window.location.href = "login.html");
+}
+
+function socialAlert(f) { alert(f + " is under development."); }
+
+// Master Data Table View
+function loadMasterDataTable() {
+    fetch("../backend/get_master_data_table.php")
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) renderMasterDataTable(data.data);
     });
 }
 
-// Load and display master data table from database
-function loadMasterDataTable() {
-    console.log("Loading master data table from database...");
-    
-    fetch("../backend/get_master_data_table.php")
-        .then(res => {
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            return res.json();
-        })
+function renderMasterDataTable(data) {
+    const tbody = document.getElementById("masterDataTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = data.map(row => `
+        <tr>
+            <td style="text-align:center;">${row.id}</td>
+            <td><span class="type-badge ${row.type.toLowerCase()}">${row.type}</span></td>
+            <td>${row.value}</td>
+            <td><small>${row.created_at}</small></td>
+            <td style="text-align:center;">
+                <button class="btn-icon delete" onclick="deleteMasterData('${row.type.toLowerCase()}', '${row.value}')"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+/**
+ * Reporting & Advanced Search
+ */
+
+function generateReport(woNumber = null) {
+    const searchInput = document.getElementById("reportSearchInput");
+    const workOrder = woNumber || searchInput?.value.trim();
+
+    if (!workOrder) {
+        alert("Please enter a Work Order number.");
+        return;
+    }
+
+    fetch(`../backend/get_work.php?work_order=${encodeURIComponent(workOrder)}`)
+        .then(res => res.json())
         .then(data => {
-            if (data.success && Array.isArray(data.data)) {
-                console.log("Master data table loaded:", data.data);
-                renderMasterDataTable(data.data);
-            } else {
-                console.error("Unexpected response format:", data);
-                renderMasterDataTable([]);
+            if (!data || data.length === 0) {
+                alert("Work Order not found.");
+                return;
             }
-        })
-        .catch(err => {
-            console.error("Error loading master data table:", err);
-            renderMasterDataTable([]);
+
+            const header = data[0];
+            document.getElementById('report_wo_display').textContent = header.work_order;
+            document.getElementById('rpt_customer_name').textContent = header.customer_name || 'N/A';
+            document.getElementById('rpt_location').textContent = header.location || 'N/A';
+            document.getElementById('rpt_mrn_no').textContent = header.mrn_no || 'N/A';
+            document.getElementById('rpt_work_order').textContent = header.work_order;
+            document.getElementById('rpt_work_date').textContent = header.work_date || 'N/A';
+            document.getElementById('rpt_cut_qty').textContent = header.cut_qty || '0';
+            
+            const statusClass = normalizeStatus(header.status);
+            document.getElementById('rpt_status_badge').innerHTML = `<span class="status-badge ${statusClass}">${toTitleStatus(header.status)}</span>`;
+
+            const tbody = document.getElementById('rpt_product_body');
+            tbody.innerHTML = data.map(row => {
+                const mrQty = parseInt(row.mr_qty) || 0;
+                const received = parseInt(row.total_received) || 0;
+                const issued = parseInt(row.total_issued) || 0;
+                const balance = received - issued;
+                return `
+                    <tr>
+                        <td><strong>${row.item}</strong><br><small>Code: ${row.item_code || 'N/A'}</small></td>
+                        <td style="text-align:center;">${row.colour || 'N/A'} / ${row.size || 'N/A'}</td>
+                        <td style="text-align:center;">${mrQty}</td>
+                        <td style="text-align:center; color:var(--info);">${received}</td>
+                        <td style="text-align:center; color:var(--primary);">${issued}</td>
+                        <td style="text-align:right; font-weight:700;">${balance}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            showSection('report');
         });
 }
 
-// Render master data table in HTML
-function renderMasterDataTable(tableData) {
-    const tableBody = document.getElementById("masterDataTableBody");
-    if (!tableBody) {
-        console.warn("Master data table body element not found");
+function generateReportFromSearch() {
+    const input = document.getElementById("reportSearchInput");
+    const resultsDiv = document.getElementById("reportSearchResults");
+    if (resultsDiv) resultsDiv.style.display = "none";
+    generateReport(input ? input.value.trim() : "");
+}
+
+function handleReportSearchKeydown(event) {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        generateReportFromSearch();
+    }
+}
+
+function returnToSearch() {
+    showSection("search");
+
+    setTimeout(() => {
+        const input = document.getElementById("reportSearchInput");
+        if (input) {
+            input.focus();
+            input.select?.();
+        }
+    }, 50);
+}
+
+function suggestReportOrders() {
+    const input = document.getElementById("reportSearchInput");
+    const resultsDiv = document.getElementById("reportSearchResults");
+    if (!input || !resultsDiv) return;
+    const val = input.value.toLowerCase().trim();
+
+    if (!val) {
+        resultsDiv.style.display = "none";
         return;
     }
 
-    tableBody.innerHTML = "";
+    const filtered = lastData.filter(row => 
+        (row.work_order && row.work_order.toLowerCase().includes(val)) ||
+        (row.customer_name && row.customer_name.toLowerCase().includes(val)) ||
+        (row.mrn_no && row.mrn_no.toLowerCase().includes(val))
+    );
 
-    if (!tableData || tableData.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="5" style="text-align: center; padding: 2rem; color: #a0aec0;">
-                    <i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 0.5rem;"></i>
-                    No master data yet. Add some customers, items, or sizes above.
-                </td>
-            </tr>
-        `;
+    if (filtered.length === 0) {
+        resultsDiv.innerHTML = '<div class="suggestion-item" style="color:#999; cursor:default;">No matches found</div>';
+        resultsDiv.style.display = "block";
         return;
     }
 
-    tableData.forEach((row, index) => {
-        const tr = document.createElement("tr");
-        
-        // Format the date nicely
-        const dateObj = new Date(row.created_at);
-        const formattedDate = dateObj.toLocaleDateString() + " " + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        // Determine type badge color
-        let typeColor = "var(--primary)";
-        if (row.type === "Item") typeColor = "var(--info)";
-        if (row.type === "Size") typeColor = "var(--warning)";
-        
-        tr.innerHTML = `
-            <td style="text-align: center; font-weight: 600; color: #5a67d8;">${row.id}</td>
-            <td>
-                <span style="
-                    display: inline-block;
-                    padding: 0.25rem 0.75rem;
-                    border-radius: 999px;
-                    background: ${typeColor}15;
-                    color: ${typeColor};
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                ">
-                    ${row.type}
-                </span>
-            </td>
-            <td style="color: #1e293b; font-weight: 500;">${row.value}</td>
-            <td style="color: #64748b; font-size: 0.9rem;">${formattedDate}</td>
-            <td style="text-align: center;">
-                <button 
-                    class="btn-icon delete" 
-                    onclick="deleteMasterDataTableRow(${row.id}, '${row.type.toLowerCase()}', '${row.value.replace(/'/g, "\\'")}')"
-                    title="Delete this entry"
-                    style="padding: 0.5rem; border-radius: 6px; transition: var(--transition);"
-                >
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
-        `;
-        
-        tableBody.appendChild(tr);
+    resultsDiv.innerHTML = "";
+    const uniqueWOs = {};
+    filtered.forEach(row => {
+        if (!uniqueWOs[row.work_order]) {
+            uniqueWOs[row.work_order] = true;
+            const div = document.createElement("div");
+            div.className = "suggestion-item";
+            div.innerHTML = `<strong>${row.work_order}</strong> - ${row.customer_name} <small>(${row.mrn_no || 'No MRN'})</small>`;
+            div.onclick = () => {
+                input.value = row.work_order;
+                resultsDiv.style.display = "none";
+                generateReport(row.work_order);
+            };
+            resultsDiv.appendChild(div);
+        }
     });
-    
-    console.log(`Master data table rendered with ${tableData.length} rows`);
+    resultsDiv.style.display = "block";
 }
 
-// Delete master data entry via table row
-function deleteMasterDataTableRow(id, type, value) {
-    if (!confirm(`Delete ${value} from ${type}s?`)) return;
+function searchEditWorkOrders() {
+    const input = document.getElementById("editSearchInput");
+    const resultsDiv = document.getElementById("editSearchResults");
+    if (!input || !resultsDiv) return;
+    const val = input.value.toLowerCase().trim();
+
+    if (!val) {
+        resultsDiv.style.display = "none";
+        return;
+    }
+
+    const filtered = lastData.filter(row => 
+        (row.work_order && row.work_order.toLowerCase().includes(val)) ||
+        (row.customer_name && row.customer_name.toLowerCase().includes(val)) ||
+        (row.mrn_no && row.mrn_no.toLowerCase().includes(val))
+    );
+
+    resultsDiv.innerHTML = "";
+    const uniqueWOs = {};
     
-    console.log(`Deleting from table: ID=${id}, Type=${type}, Value=${value}`);
-    deleteMasterData(type, value);
+    filtered.slice(0, 10).forEach(row => {
+        if (!uniqueWOs[row.work_order]) {
+            uniqueWOs[row.work_order] = true;
+            const div = document.createElement("div");
+            div.className = "suggestion-item";
+            div.innerHTML = `<strong>${row.work_order}</strong> - ${row.customer_name} <small>(${row.item})</small>`;
+            div.onclick = () => {
+                input.value = row.work_order;
+                resultsDiv.style.display = "none";
+                prepareEdit(row);
+            };
+            resultsDiv.appendChild(div);
+        }
+    });
+
+    resultsDiv.style.display = "block";
 }
-
-// User Management Functions removed - handled by dashboard_users.js
-

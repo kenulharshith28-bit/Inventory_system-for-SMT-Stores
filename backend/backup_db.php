@@ -4,7 +4,7 @@
  * 
  * Provides functionality to create and manage full database backups.
  * Backups are stored as .sql files in the /backups/ directory.
- * Only the most recent backup is retained; older backups are automatically deleted.
+ * Every backup gets its own timestamped file; nothing is overwritten.
  */
 
 /**
@@ -12,11 +12,10 @@
  * 
  * Process:
  * 1. Creates /backups/ directory if it doesn't exist
- * 2. Exports full "stores" database as .sql file with timestamp
- * 3. Deletes previous backup file (keeps only 1 backup)
- * 4. Returns status array
+ * 2. Exports full "stores" database as a timestamped .sql file
+ * 3. Returns status array with the backup date and time
  * 
- * @return array ['success' => bool, 'message' => string, 'filename' => string|null]
+ * @return array ['success' => bool, 'message' => string, 'filename' => string|null, 'backup_time' => string|null]
  */
 function performDatabaseBackup() {
     // Database credentials from db.php context
@@ -48,18 +47,12 @@ function performDatabaseBackup() {
         ];
     }
     
-    // Generate backup filename with timestamp
-    $timestamp = date("Y-m-d_His"); // Format: 2026-04-06_143052
-    $backupFilename = "stores_backup_" . $timestamp . ".sql";
+    // Generate a unique timestamped filename for every backup.
+    $now = new DateTimeImmutable('now');
+    $timestamp = $now->format("Y-m-d_H-i-s-u");
+    $backupTime = $now->format("Y-m-d H:i:s");
+    $backupFilename = "backup_" . $timestamp . ".sql";
     $backupFilepath = $backupDir . DIRECTORY_SEPARATOR . $backupFilename;
-    
-    // Find and delete previous backup file
-    $files = glob($backupDir . DIRECTORY_SEPARATOR . "stores_backup_*.sql");
-    foreach ($files as $file) {
-        if (is_file($file)) {
-            unlink($file);
-        }
-    }
     
     // Determine mysqldump path based on OS
     $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
@@ -93,7 +86,8 @@ function performDatabaseBackup() {
         return [
             'success' => false,
             'message' => 'mysqldump executable not found. Please ensure MySQL is installed.',
-            'filename' => null
+            'filename' => null,
+            'backup_time' => null
         ];
     }
     
@@ -120,14 +114,16 @@ function performDatabaseBackup() {
         return [
             'success' => false,
             'message' => 'mysqldump execution failed. Return code: ' . $returnVar,
-            'filename' => null
+            'filename' => null,
+            'backup_time' => null
         ];
     }
     
     return [
         'success' => true,
-        'message' => 'Database backup created successfully',
-        'filename' => $backupFilename
+        'message' => 'Database backup created successfully at ' . $backupTime,
+        'filename' => $backupFilename,
+        'backup_time' => $backupTime
     ];
 }
 

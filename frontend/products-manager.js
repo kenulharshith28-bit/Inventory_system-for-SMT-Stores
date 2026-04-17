@@ -375,13 +375,13 @@ function addWorkWithProducts() {
 
                         // Clear forms and reload
                         clearAllForms();
-                        loadCustomers();
+                        loadMasterData();
                         loadTable();
                     });
                 } else {
                     alert('✓ Work order successfully created!');
                     clearAllForms();
-                    loadCustomers();
+                    loadMasterData();
                     loadTable();
                 }
             } else {

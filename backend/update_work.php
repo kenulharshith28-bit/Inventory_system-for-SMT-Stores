@@ -2,8 +2,8 @@
 include "db.php";
 
 $id = (int)($_POST['id'] ?? 0);
+$productId = (int)($_POST['product_id'] ?? 0);
 $name = trim($_POST['customer_name'] ?? '');
-$workOrder = trim($_POST['work_order'] ?? '');
 $mrnNo = trim($_POST['mrn_no'] ?? '');
 $cutQty = (int)($_POST['cut_qty'] ?? 0);
 $location = trim($_POST['location'] ?? '');
@@ -20,6 +20,7 @@ if ($id <= 0) {
     die("error: ID missing");
 }
 
+// Get the existing work order - this should NEVER be changed
 $workOrderStmt = $conn->prepare("SELECT work_order FROM header_infor WHERE id = ?");
 $workOrderStmt->bind_param("i", $id);
 $workOrderStmt->execute();
@@ -31,47 +32,54 @@ if (!$workOrderStmt->fetch()) {
 }
 $workOrderStmt->close();
 
+$workOrder = $existingWorkOrder; // Keep original work order - do NOT allow changes
+
 $conn->begin_transaction();
 
 try {
+    // Update header info (work_order is protected from changes)
     $headerStmt = $conn->prepare("
         UPDATE header_infor
-        SET customer_name = ?, work_order = ?, mrn_no = ?, cut_qty = ?, location = ?, work_date = ?, status = ?
+        SET customer_name = ?, mrn_no = ?, cut_qty = ?, location = ?, work_date = ?, status = ?
         WHERE id = ?
     ");
     if ($workDate === '') {
         $workDate = date("Y-m-d");
     }
-    if ($workOrder === '') {
-        $workOrder = $existingWorkOrder;
-    }
-    $headerStmt->bind_param("sssisssi", $name, $workOrder, $mrnNo, $cutQty, $location, $workDate, $status, $id);
+    $headerStmt->bind_param("ssisssi", $name, $mrnNo, $cutQty, $location, $workDate, $status, $id);
     $headerStmt->execute();
     $headerStmt->close();
 
-    if ($existingWorkOrder !== $workOrder) {
-        $syncProductsStmt = $conn->prepare("UPDATE product_information SET work_order = ? WHERE work_order = ?");
-        $syncProductsStmt->bind_param("ss", $workOrder, $existingWorkOrder);
-        $syncProductsStmt->execute();
-        $syncProductsStmt->close();
+    // Get the specific product row being edited, if provided.
+    $productRow = null;
+    if ($productId > 0) {
+        $checkProductStmt = $conn->prepare("SELECT id, work_order FROM product_information WHERE id = ? AND work_order = ? LIMIT 1");
+        $checkProductStmt->bind_param("is", $productId, $workOrder);
+        $checkProductStmt->execute();
+        $productResult = $checkProductStmt->get_result();
+        $productRow = $productResult->fetch_assoc();
+        $checkProductStmt->close();
     }
 
-    $checkProductStmt = $conn->prepare("SELECT id FROM product_information WHERE work_order = ? ORDER BY id ASC LIMIT 1");
-    $checkProductStmt->bind_param("s", $workOrder);
-    $checkProductStmt->execute();
-    $productResult = $checkProductStmt->get_result();
-    $productRow = $productResult->fetch_assoc();
-    $checkProductStmt->close();
+    // If no specific product was supplied, fall back to the first product for this work order.
+    if (!$productRow) {
+        $checkProductStmt = $conn->prepare("SELECT id, work_order FROM product_information WHERE work_order = ? ORDER BY id ASC LIMIT 1");
+        $checkProductStmt->bind_param("s", $workOrder);
+        $checkProductStmt->execute();
+        $productResult = $checkProductStmt->get_result();
+        $productRow = $productResult->fetch_assoc();
+        $checkProductStmt->close();
+    }
 
     if ($productRow) {
         // Product exists - check for duplicate before updating
-        // Check if another product (different ID) has identical matching details
+        $targetProductId = (int)$productRow['id'];
         $checkDuplicateStmt = $conn->prepare("
             SELECT id FROM product_information 
             WHERE work_order = ? AND item_code = ? AND colour = ? AND size = ? AND unit = ? AND mr_qty = ? AND id != ?
             LIMIT 1
         ");
-        $checkDuplicateStmt->bind_param("ssssrii", $workOrder, $itemCode, $colour, $size, $unit, $mrQty, $productRow['id']);
+        $checkDuplicateStmt->bind_param("sssssii", $workOrder, $itemCode, $colour, $size, $unit, $mrQty, $targetProductId);
         $checkDuplicateStmt->execute();
         $duplicateResult = $checkDuplicateStmt->get_result();
         $checkDuplicateStmt->close();
@@ -86,9 +94,11 @@ try {
             SET item_code = ?, item = ?, colour = ?, size = ?, unit = ?, mr_qty = ?
             WHERE id = ?
         ");
-        $productStmt->bind_param("sssssii", $itemCode, $item, $colour, $size, $unit, $mrQty, $productRow['id']);
+        $productStmt->bind_param("sssssii", $itemCode, $item, $colour, $size, $unit, $mrQty, $targetProductId);
+        $productStmt->execute();
+        $productStmt->close();
     } else {
-        // Product doesn't exist - check for duplicate before inserting
+        // No product exists yet for this work order - create one
         $checkDuplicateStmt = $conn->prepare("
             SELECT id FROM product_information 
             WHERE work_order = ? AND item_code = ? AND colour = ? AND size = ? AND unit = ? AND mr_qty = ?
@@ -109,10 +119,9 @@ try {
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
         $productStmt->bind_param("ssssssi", $workOrder, $itemCode, $item, $colour, $size, $unit, $mrQty);
+        $productStmt->execute();
+        $productStmt->close();
     }
-
-    $productStmt->execute();
-    $productStmt->close();
 
     $conn->commit();
     echo "updated";

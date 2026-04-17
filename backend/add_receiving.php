@@ -39,12 +39,12 @@ try {
     $totalReceived = intval($productData['total_received']);
 
     // 2. Logic: Check if receiving reaches/exceeds MR Qty - NOTIFY but ALLOW if force=true
-    if ($totalReceived + $receivedQty >= $mrQty && $force !== 'true') {
+    if ($totalReceived + $receivedQty > $mrQty && $force !== 'true') {
         $newTotal = $totalReceived + $receivedQty;
         echo json_encode([
             'success' => false, 
             'error' => 'MR_FULFILLED',
-            'message' => "ℹ️ INFO: Adding $receivedQty will reach/exceed MR Qty ($mrQty). Total will be $newTotal. Continue to fulfill MR?",
+            'message' => "ℹ️ INFO: Adding $receivedQty will exceed MR Qty ($mrQty). Total will be $newTotal. Continue anyway?",
             'limit' => $mrQty,
             'current' => $totalReceived,
             'new_total' => $newTotal
@@ -94,21 +94,15 @@ function updateWorkOrderStatus($conn, $workOrder) {
         $received = intval($totals['total_received']);
         $issued = intval($totals['total_issued']);
 
-        // CORRECT Status Logic:
-        // - created: No receiving or issuing
-        // - received: Has receiving, no issuing yet
-        // - pending: Has issuing but not all has been issued
-        // - done: All issued equals all received (balanced)
-        
         $newStatus = 'created';
         if ($received == 0 && $issued == 0) {
             $newStatus = 'created';
+        } elseif ($received === $mr && $issued === $mr) {
+            $newStatus = 'done';
         } elseif ($received > 0 && $issued == 0) {
             $newStatus = 'received';
-        } elseif ($issued > 0 && $issued < $received) {
+        } elseif ($received > 0 || $issued > 0) {
             $newStatus = 'pending';
-        } elseif ($issued > 0 && $issued >= $received) {
-            $newStatus = 'done';  // When issued >= received (balanced or shortage created)
         }
 
         $updateStmt = $conn->prepare("UPDATE header_infor SET status = ? WHERE work_order = ?");

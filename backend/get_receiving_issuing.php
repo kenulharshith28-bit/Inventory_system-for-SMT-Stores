@@ -37,7 +37,11 @@ try {
     $mr_qty = intval($product['mr_qty']);
 
     $balance = $total_received - $total_issued;
-    $mr_shortage = $mr_qty - $total_issued;
+    $receiving_over_mr = max(0, $total_received - $mr_qty);
+    $receiving_shortage = max(0, $mr_qty - $total_received);
+    $issuing_shortage = max(0, $mr_qty - $total_issued);
+    $issuing_over_mr = max(0, $total_issued - $mr_qty);
+    $isComplete = ($total_received === $mr_qty) && ($total_issued === $mr_qty);
 
     // 3. Get History
     $receivingStmt = $conn->prepare("SELECT qty as received_qty, date as received_date, note as received_notes FROM receivings WHERE product_id = ? ORDER BY date DESC");
@@ -57,12 +61,16 @@ try {
             'total_received' => $total_received,
             'total_issued' => $total_issued,
             'balance' => $balance,
-            'mr_shortage' => $mr_shortage,
-            'mr_qty' => $mr_qty
+            'mr_qty' => $mr_qty,
+            'receiving_over_mr' => $receiving_over_mr,
+            'receiving_shortage' => $receiving_shortage,
+            'issuing_shortage' => $issuing_shortage,
+            'issuing_over_mr' => $issuing_over_mr,
+            'is_complete' => $isComplete
         ],
         'receiving' => $receivingHistory,
         'issuing' => $issuingHistory,
-        'hasShortage' => $mr_shortage > 0
+        'hasShortage' => !$isComplete || $receiving_over_mr > 0 || $issuing_shortage > 0 || $issuing_over_mr > 0
     ]);
 
 } catch (Exception $e) {

@@ -10,6 +10,10 @@ $startDate = clone $now;
 
 if ($range === 'today') {
     $startDateStr = $now->format('Y-m-d');
+} elseif ($range === 'all') {
+    $minDateResult = $conn->query("SELECT MIN(work_date) AS min_date FROM header_infor WHERE work_date IS NOT NULL");
+    $minDateRow = $minDateResult ? $minDateResult->fetch_assoc() : null;
+    $startDateStr = !empty($minDateRow['min_date']) ? $minDateRow['min_date'] : $now->format('Y-m-d');
 } elseif ($range === '30days') {
     $startDate->modify('-29 days');
     $startDateStr = $startDate->format('Y-m-d');
@@ -33,16 +37,20 @@ $result = $stmt->get_result();
 $counts = [];
 while ($row = $result->fetch_assoc()) {
     $date = $row['work_date'];
-    $status = strtolower($row['status']);
+    $status = strtolower(trim($row['status']));
 
     if (!isset($counts[$date])) {
-        $counts[$date] = ['pending' => 0, 'done' => 0];
+        $counts[$date] = ['open' => 0, 'pending' => 0, 'done' => 0];
     }
 
+    // Categorize statuses: open (created/received), pending, done
     if ($status === 'done') {
         $counts[$date]['done'] = (int)$row['count'];
+    } elseif ($status === 'pending') {
+        $counts[$date]['pending'] = (int)$row['count'];
     } else {
-        $counts[$date]['pending'] += (int)$row['count'];
+        // created, received, or any other status = open
+        $counts[$date]['open'] += (int)$row['count'];
     }
 }
 
@@ -51,6 +59,7 @@ if ($range === 'today') {
     $dateStr = $now->format('Y-m-d');
     $chartData[] = [
         'date' => $dateStr,
+        'open' => $counts[$dateStr]['open'] ?? 0,
         'pending' => $counts[$dateStr]['pending'] ?? 0,
         'done' => $counts[$dateStr]['done'] ?? 0
     ];
@@ -63,6 +72,7 @@ if ($range === 'today') {
         $dateStr = $currentDate->format('Y-m-d');
         $chartData[] = [
             'date' => $dateStr,
+            'open' => $counts[$dateStr]['open'] ?? 0,
             'pending' => $counts[$dateStr]['pending'] ?? 0,
             'done' => $counts[$dateStr]['done'] ?? 0
         ];

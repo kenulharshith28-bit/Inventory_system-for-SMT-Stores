@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup & Restore Manager</title>
+    <!-- Fallback XLSX libraries (multiple CDNs for reliability) -->
+    <script>
+        // Check if XLSX is already loaded, if not will be loaded by primary CDN
+        window.XLSX_LOADED = false;
+        window.XLSX_ERROR = null;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js" 
+            onerror="loadXLSXFallback()"></script>
+    <!-- Fallback CDN -->
+    <script>
+        function loadXLSXFallback() {
+            console.warn('Primary XLSX CDN failed, trying fallback...');
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js';
+            script.onerror = () => {
+                console.error('All XLSX CDNs failed');
+                window.XLSX_ERROR = 'Failed to load Excel library from all CDNs';
+            };
+            script.onload = () => {
+                console.log('Fallback XLSX loaded successfully');
+                window.XLSX_LOADED = true;
+            };
+            document.head.appendChild(script);
+        }
+        
+        // Monitor primary XLSX loading
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof XLSX !== 'undefined') {
+                window.XLSX_LOADED = true;
+                console.log('XLSX library loaded:', XLSX.version);
+            }
+        });
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tab-btn {
+            padding: 0.8rem 1.5rem;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .tab-btn:hover:not(.active) {
+            background: #e0e0e0;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 0.5rem;
+        }
+        
+        .backup-list {
+            list-style: none;
+        }
+        
+        .backup-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #f9fafb;
+            margin-bottom: 0.8rem;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .backup-info {
+            flex: 1;
+        }
+        
+        .backup-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.3rem;
+        }
+        
+        .backup-meta {
+            font-size: 0.85rem;
+            color: #666;
+        }
+        
+        .backup-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        button {
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .message {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        
+        .message.show {
+            display: block;
+        }
+        
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+        
+        .message.error {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border-left: 4px solid #ef4444;
+        }
+        
+        .message.info {
+            background: #dbeafe;
+            color: #0c2d6b;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .spinner {
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        select,
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 200px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            color: #856404;
+        }
+        
+        .info-box {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            color: #0c5460;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .stat-card {
+            background: #f9fafb;
+            padding: 1rem;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .confirm-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .confirm-modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        
+        .modal-body {
+            color: #666;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+        
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+        
+        @media (max-width: 768px) {
+            .backup-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .backup-actions {
+                margin-top: 1rem;
+                width: 100%;
+            }
+            
+            .backup-actions button {
+                flex: 1;
+            }
+            
+            .tabs {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>💾 Backup & Restore Manager</h1>
+            <p class="subtitle">Manage database backups with safe restore options</p>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('backups')">📦 Backups</button>
+            <button class="tab-btn" onclick="switchTab('restore')">↩️ Restore</button>
+            <button class="tab-btn" onclick="switchTab('manual')">📥 Manual Upload</button>
+            <button class="tab-btn" onclick="switchTab('logs')">📋 Logs</button>
+        </div>
+        
+        <!-- BACKUPS TAB -->
+        <div id="backups" class="tab-content active">
+            <div class="card">
+                <h2>Available Backups</h2>
+                <div id="backupMessage" class="message"></div>
+                <div id="backupList" class="loading">
+                    <div class="spinner"></div>
+                    Loading backups...
+                </div>
+            </div>
+        </div>
+        
+        <!-- RESTORE TAB -->
+        <div id="restore" class="tab-content">
+            <div class="card">
+                <h2>Restore from Backup</h2>
+                <div id="restoreMessage" class="message"></div>
+                
+                <div class="form-group">
+                    <label for="backupSelect">Select Backup File:</label>
+                    <select id="backupSelect" onchange="previewBackup()">
+                        <option value="">-- Choose a backup to preview --</option>
+                    </select>
+                </div>
+                
+                <div id="backupPreview" style="display:none; margin-top: 1rem;">
+                    <div class="info-box">
+                        <strong>Backup Information:</strong>
+                        <div style="margin-top: 0.5rem;">
+                            <div><strong>File:</strong> <span id="previewFilename"></span></div>
+                            <div><strong>Size:</strong> <span id="previewSize"></span></div>
+                            <div><strong>Date:</strong> <span id="previewDate"></span></div>
+                            <div><strong>Estimated Tables:</strong> <span id="previewTables"></span></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-top: 1.5rem;">
+                    <label for="restoreMode">Restore Mode:</label>
+                    <select id="restoreMode">
+                        <option value="new_db">✅ Create New Database (Safe - Recommended)</option>
+                        <option value="current_db">⚠️ Overwrite Current Database (Requires Confirmation)</option>
+                    </select>
+                    <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
+                        <strong>New Database:</strong> Restores to a separate database (e.g., stores_restored_20260408)<br>
+                        <strong>Overwrite:</strong> Replaces current database (automatic safety backup created first)
+                    </p>
+                </div>
+                
+                <button class="btn-primary" onclick="startRestore()" style="width: 100%; margin-top: 1rem;">
+                    ↩️ Restore Selected Backup
+                </button>
+            </div>
+        </div>
+        
+        <!-- MANUAL UPLOAD TAB -->
+        <div id="manual" class="tab-content">
+            <div class="card">
+                <h2>Manual Database Upload</h2>
+                <div class="warning-box">
+                    ⚠️ For advanced users: Upload a .sql file directly to restore
+                </div>
+                <div id="uploadMessage" class="message"></div>
+                
+                <div class="form-group">
+                    <label for="sqlFile">Select SQL File (.sql):</label>
+                    <input type="file" id="sqlFile" accept=".sql" >
+                </div>
+                
+                <div class="form-group">
+                    <label for="uploadMode">Restore Mode:</label>
+                    <select id="uploadMode">
+                        <option value="new_db">✅ Create New Database</option>
+                        <option value="current_db">⚠️ Overwrite Current Database</option>
+                    </select>
+                </div>
+                
+                <button class="btn-secondary" onclick="handleFileUpload()" style="width: 100%;">
+                    📤 Upload & Restore
+                </button>
+            </div>
+        </div>
+        
+        <!-- LOGS TAB -->
+        <div id="logs" class="tab-content">
+            <div class="card">
+                <h2>Restore Activity Log</h2>
+                <div id="logMessage" class="message"></div>
+                <div id="logContent" style="background: #f9fafb; padding: 1rem; border-radius: 4px; font-family: monospace; font-size: 0.85rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">
+                    Loading logs...
+                </div>
+                <button class="btn-secondary" onclick="loadLogs()" style="margin-top: 1rem;">
+                    🔄 Refresh Logs
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="confirm-modal">
+        <div class="modal-content">
+            <div class="modal-header" id="confirmTitle">Confirm Action</div>
+            <div class="modal-body" id="confirmMessage"></div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeConfirm()">Cancel</button>
+                <button class="btn-danger" onclick="confirmRestore()">Yes, Overwrite</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '../backend/restore_backup.php';
+        let pendingRestore = null;
+        let backupsList = [];
+        
+        // ====================================================================
+        // TAB SWITCHING
+        // ====================================================================
+        
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load data when switching
+            if (tabName === 'backups') {
+                loadBackups();
+            } else if (tabName === 'logs') {
+                loadLogs();
+            } else if (tabName === 'restore') {
+                loadBackupsList();
+            }
+        }
+        
+        // ====================================================================
+        // LOAD BACKUPS LIST
+        // ====================================================================
+        
+        async function loadBackups() {
+            const listEl = document.getElementById('backupList');
+            const msgEl = document.getElementById('backupMessage');
+            
+            try {
+                const res = await fetch(API_BASE + '?action=list');
+                const data = await res.json();
+                
+                if (!data.success) {
+                    showMessage(msgEl, 'error', '❌ ' + data.message);
+                    listEl.innerHTML = '';
+                    return;
+                }
+                
+                if (data.backups.length === 0) {
+                    listEl.innerHTML = '<p style="color: #999;">No backups found</p>';
+                    return;
+                }
+                
+                const html = data.backups.map(backup => `
+                    <div class="backup-item">
+                        <div class="backup-info">
+                            <div class="backup-name">📄 ${backup.filename}</div>
+                            <div class="backup-meta">
+                                Size: <strong>${backup.size}</strong> | 
+                                Modified: <strong>${backup.modified}</strong>
+                            </div>
+                        </div>
+                        <div class="backup-actions">
+                            <button class="btn-secondary btn-small" onclick="previewBackupFile('${backup.path}')">
+                                👁️ Preview
+                            </button>
+                            <button class="btn-primary btn-small" onclick="restoreFile('${backup.path}')">
+                                ↩️ Restore
+                            </button>
+                            <button class="btn-success btn-small" onclick="downloadBackup('${backup.path}')">
+                                ⬇️ Download
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+                
+                listEl.innerHTML = html;
+                msgEl.classList.remove('show');
+                
+            } catch (error) {
+                console.error('Error loading backups:', error);
+                showMessage(msgEl, 'error', '❌ Failed to load backups: ' + error.message);
+                listEl.innerHTML = '';
+            }
+        }
+        
+        // ====================================================================
+        // LOAD BACKUPS FOR DROPDOWN
+        // ====================================================================
+        
+        async function loadBackupsList() {
+            try {
+                const res = await fetch(API_BASE + '?action=list');
+                const data = await res.json();
+                
+                if (!data.success) {
+                    return;
+                }
+                
+                backupsList = data.backups;
+                const select = document.getElementById('backupSelect');
+                
+                const options = backupsList.map(backup => 
+                    `<option value="${backup.path}">${backup.filename} (${backup.size})</option>`
+                ).join('');
+                
+                select.innerHTML = '<option value="">-- Choose a backup to preview --</option>' + options;
+                
+            } catch (error) {
+                console.error('Error loading backups list:', error);
+            }
+        }
+        
+        // ====================================================================
+        // PREVIEW BACKUP
+        // ====================================================================
+        
+        async function previewBackup() {
+            const backupFile = document.getElementById('backupSelect').value;
+            
+            if (!backupFile) {
+                document.getElementById('backupPreview').style.display = 'none';
+                return;
+            }
+            
+            await previewBackupFile(backupFile);
+        }
+        
+        async function previewBackupFile(backupFile) {
+            try {
+                const res = await fetch(API_BASE + '?action=preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'backup_file=' + encodeURIComponent(backupFile)
+                });
+                
+                const data = await res.json();
+                
+                if (!data.success) {
+                    showMessage(document.getElementById('restoreMessage'), 'error', '❌ ' + data.message);
+                    return;
+                }
+                
+                // Show preview
+                document.getElementById('previewFilename').textContent = data.filename;
+                document.getElementById('previewSize').textContent = data.file_size;
+                document.getElementById('previewDate').textContent = data.file_date;
+                document.getElementById('previewTables').textContent = data.estimated_tables || '?';
+                document.getElementById('backupPreview').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error previewing backup:', error);
+                showMessage(document.getElementById('restoreMessage'), 'error', '❌ Failed to preview backup');
+            }
+        }
+        
+        // ====================================================================
+        // RESTORE FUNCTIONS
+        // ====================================================================
+        
+        function restoreFile(backupFile) {
+            document.getElementById('backupSelect').value = backupFile;
+            document.querySelectorAll('.tab-btn')[1].click(); // Switch to restore tab
+        }
+        
+        async function startRestore() {
+            const backupFile = document.getElementById('backupSelect').value;
+            const restoreMode = document.getElementById('restoreMode').value;
+            const msgEl = document.getElementById('restoreMessage');
+            
+            if (!backupFile) {
+                showMessage(msgEl, 'error', '❌ Please select a backup file');
+                return;
+            }
+            
+            // If overwriting current database, ask for confirmation
+            if (restoreMode === 'current_db') {
+                showConfirmation(
+                    'Overwrite Current Database?',
+                    `This will replace the current database with the backup. A safety backup will be created automatically.\n\nAre you sure?`,
+                    () => performRestore(backupFile, restoreMode, true)
+                );
+            } else {
+                performRestore(backupFile, restoreMode, false);
+            }
+        }
+        
+        async function performRestore(backupFile, restoreMode, confirmed = false) {
+            const msgEl = document.getElementById('restoreMessage');
+            
+            try {
+                const formData = new URLSearchParams();
+                formData.append('action', 'restore');
+                formData.append('backup_file', backupFile);
+                formData.append('restore_mode', restoreMode);
+                if (confirmed) {
+                    formData.append('confirm_overwrite', '1');
+                }
+                
+                msgEl.innerHTML = '<div class="spinner" style="margin-bottom: 1rem;"></div>Restoring database... Please wait...';
+                msgEl.classList.add('show', 'info');
+                
+                const res = await fetch(API_BASE, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (!data.success) {
+                    showMessage(msgEl, 'error', '❌ Restore Failed: ' + data.message);
+                    if (data.safety_backup) {
+                        showMessage(msgEl, 'info', 'ℹ️ Safety backup available: ' + data.safety_backup);
+                    }
+                    return;
+                }
+                
+                showMessage(msgEl, 'success', 
+                    `✅ Restore Successful!\n` +
+                    `Target Database: ${data.target_database}\n` +
+                    `Backup File: ${data.backup_file}\n` +
+                    `Safety Backup: ${data.safety_backup}`
+                );
+                
+                loadBackups();
+                
+            } catch (error) {
+                console.error('Error during restore:', error);
+                showMessage(msgEl, 'error', '❌ Restore failed: ' + error.message);
+            }
+        }
+        
+        // ====================================================================
+        // DOWNLOAD BACKUP
+        // ====================================================================
+        
+        function downloadBackup(backupFile) {
+            const link = document.createElement('a');
+            link.href = '../backups/' + encodeURIComponent(backupFile);
+            link.download = backupFile;
+            link.click();
+        }
+        
+        // ====================================================================
+        // LOAD LOGS
+        // ====================================================================
+        
+        async function loadLogs() {
+            try {
+                const res = await fetch(API_BASE + '?action=status');
+                const data = await res.json();
+                
+                if (!data.success) {
+                    document.getElementById('logContent').textContent = 'Failed to load logs';
+                    return;
+                }
+                
+                const logs = data.last_log_entries.join('\n');
+                document.getElementById('logContent').textContent = logs || 'No log entries yet';
+                
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                document.getElementById('logContent').textContent = 'Error loading logs: ' + error.message;
+            }
+        }
+        
+        // ====================================================================
+        // CONFIRMATION MODAL
+        // ====================================================================
+        
+        function showConfirmation(title, message, onConfirm) {
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmModal').classList.add('show');
+            window.confirmCallback = onConfirm;
+        }
+        
+        function closeConfirm() {
+            document.getElementById('confirmModal').classList.remove('show');
+            window.confirmCallback = null;
+        }
+        
+        function confirmRestore() {
+            if (window.confirmCallback) {
+                window.confirmCallback();
+            }
+            closeConfirm();
+        }
+        
+        // ====================================================================
+        // MESSAGE DISPLAY
+        // ====================================================================
+        
+        function showMessage(element, type, message) {
+            element.className = 'message show ' + type;
+            element.textContent = message;
+        }
+        
+        // ====================================================================
+        // INITIALIZE
+        // ====================================================================
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check XLSX library
+            setTimeout(() => {
+                if (!window.XLSX_LOADED && typeof XLSX === 'undefined') {
+                    console.warn('XLSX library not loaded - Excel features may not work');
+                } else {
+                    console.log('✓ XLSX library loaded successfully');
+                }
+            }, 2000);
+            
+            loadBackups();
+        });
+    </script>
+</body>
+</html>

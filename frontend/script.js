@@ -12,16 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Authentication & UI Toggle
+ * User Registration Removed
+ * Users are only created by admins via Dashboard > Users panel
  */
-function toggleAuth(mode) {
-    const loginSection = document.getElementById("loginSection");
-    const registerSection = document.getElementById("registerSection");
-    if (loginSection && registerSection) {
-        loginSection.style.display = mode === 'register' ? "none" : "block";
-        registerSection.style.display = mode === 'register' ? "block" : "none";
-    }
-}
 
 function socialAlert(feature) {
     if (feature === 'Password recovery') {
@@ -73,75 +66,47 @@ function login() {
     });
 }
 
-/**
- * Handles User Registration
- */
-function register() {
-    let user = document.getElementById("reg_username").value;
-    let pass = document.getElementById("reg_password").value;
 
-    if (!user || !pass) {
-        if (document.getElementById("reg_error")) {
-            document.getElementById("reg_error").innerText = "Please fill all fields";
-        }
-        return;
-    }
-
-    let params = new URLSearchParams();
-    params.append('username', user);
-    params.append('password', pass);
-
-    fetch("../backend/register.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString()
-    })
-    .then(res => res.text())
-    .then(data => {
-        data = data.trim();
-        if (data === "success") {
-            alert("Account created successfully! ✅ Please login.");
-            toggleAuth('login');
-        } else if (data === "exists") {
-            if (document.getElementById("reg_error")) {
-                document.getElementById("reg_error").innerText = "Username already taken";
-            }
-        } else {
-            if (document.getElementById("reg_error")) {
-                document.getElementById("reg_error").innerText = "Registration failed. Try again.";
-            }
-        }
-    })
-    .catch(err => {
-        console.error("Registration error:", err);
-        if (document.getElementById("reg_error")) {
-            document.getElementById("reg_error").innerText = "Connection error. Please try again.";
-        }
-    });
-}
 
 /**
  * Sidebar Navigation & UI States
  */
 function showSection(section) {
+    // Hide all sections first
+    const sections = ['homeSection', 'newSection', 'masterSection', 'editSection', 'reportSection', 'searchSection', 'receivingIssuingSection', 'usersSection'];
+    sections.forEach(s => {
+        const el = document.getElementById(s);
+        if (el) el.classList.add('content-hidden');
+    });
+    
     // Reset active nav items
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-    
-    const newForm = document.getElementById("newForm");
-    const editForm = document.getElementById("editForm");
 
-    if (section === 'new') {
-        newForm.style.display = "block";
-        editForm.style.display = "none";
+    if (section === 'home') {
+        document.getElementById("homeSection").classList.remove('content-hidden');
+        document.getElementById("nav-home").classList.add('active');
+        loadTable();
+    } else if (section === 'new') {
+        document.getElementById("newSection").classList.remove('content-hidden');
         document.getElementById("nav-new").classList.add('active');
-    } else if (section === 'search') {
-        document.getElementById("searchInput").focus();
-        document.getElementById("nav-search").classList.add('active');
+    } else if (section === 'master') {
+        document.getElementById("masterSection").classList.remove('content-hidden');
+        document.getElementById("nav-master").classList.add('active');
+        setTimeout(() => loadMasterDataTable(), 100);
     } else if (section === 'edit') {
+        document.getElementById("editSection").classList.remove('content-hidden');
         document.getElementById("nav-edit").classList.add('active');
-        if (editForm.style.display === "none") {
-            alert("Please select an order from the table to edit.");
-        }
+    } else if (section === 'receivingIssuing') {
+        document.getElementById("receivingIssuingSection").classList.remove('content-hidden');
+        document.getElementById("nav-receivingIssuing").classList.add('active');
+        setTimeout(() => loadIncompleteWorkOrders(), 100);
+    } else if (section === 'search') {
+        document.getElementById("searchSection").classList.remove('content-hidden');
+        document.getElementById("nav-search").classList.add('active');
+    } else if (section === 'users') {
+        document.getElementById("usersSection").classList.remove('content-hidden');
+        document.getElementById("nav-users").classList.add('active');
+        setTimeout(() => loadUsers(), 100);
     }
 }
 

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup Status Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .status-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-card.success {
+            border-left-color: #10b981;
+        }
+        
+        .status-card.warning {
+            border-left-color: #f59e0b;
+        }
+        
+        .status-card.error {
+            border-left-color: #ef4444;
+        }
+        
+        .status-label {
+            font-size: 0.8rem;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .status-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .status-card.success .status-value {
+            color: #10b981;
+        }
+        
+        .status-card.warning .status-value {
+            color: #f59e0b;
+        }
+        
+        .status-card.error .status-value {
+            color: #ef4444;
+        }
+        
+        .details-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .details-card h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 0.5rem;
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .detail-value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .backup-list {
+            list-style: none;
+        }
+        
+        .backup-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #f9fafb;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .backup-item.newest {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+        
+        .backup-item.oldest {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+        
+        .backup-name {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .backup-info {
+            font-size: 0.85rem;
+            color: #666;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        button {
+            flex: 1;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(16, 185, 129, 0.3);
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .spinner {
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .message {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+            display: block;
+        }
+        
+        .message.error {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border-left: 4px solid #ef4444;
+            display: block;
+        }
+        
+        .message.info {
+            background: #dbeafe;
+            color: #0c2d6b;
+            border-left: 4px solid #3b82f6;
+            display: block;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📊 Database Backup Monitor</h1>
+            <p class="subtitle">Real-time backup status and management</p>
+        </div>
+        
+        <!-- Message Display -->
+        <div class="message" id="message"></div>
+        
+        <!-- Status Grid -->
+        <div class="status-grid" id="statusGrid">
+            <div class="status-card loading">
+                <div class="spinner"></div>
+                Loading...
+            </div>
+        </div>
+        
+        <!-- Backup Statistics -->
+        <div class="details-card" id="statsCard" style="display: none;">
+            <h2>📈 Backup Statistics</h2>
+            <div class="detail-item">
+                <span class="detail-label">Total Backups:</span>
+                <span class="detail-value"><span id="backupCount">-</span> / <span id="maxBackups">-</span></span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Total Size:</span>
+                <span class="detail-value" id="totalSize">-</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Storage Used:</span>
+                <span class="detail-value"><span id="usagePercent">-</span>%</span>
+            </div>
+        </div>
+        
+        <!-- Latest Backups -->
+        <div class="details-card" id="backupsCard" style="display: none;">
+            <h2>📂 Recent Backups</h2>
+            <ul class="backup-list" id="backupsList"></ul>
+        </div>
+        
+        <!-- Last Backup Details -->
+        <div class="details-card" id="lastBackupCard" style="display: none;">
+            <h2>✨ Last Backup Details</h2>
+            <div class="detail-item">
+                <span class="detail-label">Filename:</span>
+                <span class="detail-value" id="lastFilename">-</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Date/Time:</span>
+                <span class="detail-value" id="lastDateTime">-</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Size:</span>
+                <span class="detail-value" id="lastSize">-</span>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="details-card">
+            <h2>⚙️ Actions</h2>
+            <div class="button-group">
+                <button class="btn-primary" onclick="location.reload()">🔄 Refresh Status</button>
+                <button class="btn-success" onclick="runBackupNow()">▶️ Run Backup Now</button>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>Last updated: <span id="lastUpdate">-</span></p>
+            <p>Auto-refresh every 30 seconds</p>
+        </div>
+    </div>
+    
+    <script>
+        const REFRESH_INTERVAL = 30000; // 30 seconds
+        
+        /**
+         * Load and display backup status
+         */
+        async function loadBackupStatus() {
+            try {
+                const response = await fetch('backup_automation.php?format=json');
+                if (!response.ok) throw new Error('Failed to fetch backup status');
+                
+                const data = await response.json();
+                displayStatus(data);
+                updateTimestamp();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showMessage('Error loading backup status: ' + error.message, 'error');
+            }
+        }
+        
+        /**
+         * Display backup status in UI
+         */
+        function displayStatus(data) {
+            const container = document.getElementById('statusGrid');
+            container.innerHTML = '';
+            
+            // Overall Status
+            const statusCard = createStatusCard(
+                data.success ? '✓ Operational' : '✗ Issue Detected',
+                'System Status',
+                data.success ? 'success' : 'error'
+            );
+            container.appendChild(statusCard);
+            
+            // Backups Count
+            if (data.stats) {
+                const count = data.stats.backup_count;
+                const max = data.stats.max_backups;
+                const percent = Math.round((count / max) * 100);
+                
+                const statusClass = percent < 80 ? 'success' : percent < 95 ? 'warning' : 'error';
+                const countCard = createStatusCard(
+                    `${count}/${max}`,
+                    'Backup Count',
+                    statusClass
+                );
+                container.appendChild(countCard);
+                
+                // Total Size
+                const sizeCard = createStatusCard(
+                    data.stats.total_size_mb + ' MB',
+                    'Total Size',
+                    'success'
+                );
+                container.appendChild(sizeCard);
+            }
+            
+            // Display detailed information
+            if (data.stats) {
+                displayStats(data.stats);
+                displayBackupsList(data.stats.backups);
+                displayLastBackup(data.stats.newest_backup);
+            }
+        }
+        
+        /**
+         * Create a status card element
+         */
+        function createStatusCard(value, label, statusClass = 'success') {
+            const card = document.createElement('div');
+            card.className = `status-card ${statusClass}`;
+            card.innerHTML = `
+                <div class="status-label">${label}</div>
+                <div class="status-value">${value}</div>
+            `;
+            return card;
+        }
+        
+        /**
+         * Display statistics
+         */
+        function displayStats(stats) {
+            const statsCard = document.getElementById('statsCard');
+            statsCard.style.display = 'block';
+            
+            document.getElementById('backupCount').textContent = stats.backup_count;
+            document.getElementById('maxBackups').textContent = stats.max_backups;
+            document.getElementById('totalSize').textContent = stats.total_size_mb + ' MB';
+            
+            const percent = Math.round((stats.total_size_mb / (stats.max_backups * 15)) * 100);
+            document.getElementById('usagePercent').textContent = Math.min(percent, 100);
+        }
+        
+        /**
+         * Display list of recent backups
+         */
+        function displayBackupsList(backups) {
+            const backupsCard = document.getElementById('backupsCard');
+            const list = document.getElementById('backupsList');
+            
+            if (!backups || backups.length === 0) {
+                list.innerHTML = '<li><p style="color: #999;">No backups found</p></li>';
+                backupsCard.style.display = 'block';
+                return;
+            }
+            
+            // Show first 5 backups
+            list.innerHTML = backups.slice(0, 5).map((backup, index) => `
+                <li class="backup-item ${index === 0 ? 'newest' : ''} ${index === backups.length - 1 ? 'oldest' : ''}">
+                    <div>
+                        <div class="backup-name">${backup.filename}</div>
+                        <div class="backup-info">${backup.modified}</div>
+                    </div>
+                    <div class="detail-value">${backup.size_mb} MB</div>
+                </li>
+            `).join('');
+            
+            backupsCard.style.display = 'block';
+        }
+        
+        /**
+         * Display last backup details
+         */
+        function displayLastBackup(backup) {
+            if (!backup) return;
+            
+            const card = document.getElementById('lastBackupCard');
+            card.style.display = 'block';
+            
+            document.getElementById('lastFilename').textContent = backup.filename;
+            document.getElementById('lastDateTime').textContent = backup.modified;
+            document.getElementById('lastSize').textContent = backup.size_mb + ' MB';
+        }
+        
+        /**
+         * Run backup immediately
+         */
+        async function runBackupNow() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+            
+            try {
+                const response = await fetch('backup_automation.php?format=json');
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('✓ Backup completed successfully!', 'success');
+                    loadBackupStatus();
+                } else {
+                    showMessage('✗ Backup failed: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('✗ Error running backup: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '▶️ Run Backup Now';
+            }
+        }
+        
+        /**
+         * Show message
+         */
+        function showMessage(message, type = 'info') {
+            const msgEl = document.getElementById('message');
+            msgEl.className = `message ${type}`;
+            msgEl.textContent = message;
+            
+            setTimeout(() => {
+                msgEl.className = 'message';
+            }, 5000);
+        }
+        
+        /**
+         * Update last refresh timestamp
+         */
+        function updateTimestamp() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                now.toLocaleString();
+        }
+        
+        // Initial load
+        loadBackupStatus();
+        
+        // Auto-refresh
+        setInterval(loadBackupStatus, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>

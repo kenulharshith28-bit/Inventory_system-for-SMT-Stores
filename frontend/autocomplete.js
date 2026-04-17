@@ -14,14 +14,6 @@ let suggestionsCache = {
 
 // Initialize autocomplete listeners
 function initializeAutocomplete() {
-    // New Work Order form fields
-    if (document.getElementById('name')) {
-        document.getElementById('name').addEventListener('input', () => {
-            const suggestions = suggestionsCache.customers.map(c => c.customer_name);
-            updateSelectSuggestions('name', suggestions);
-        });
-    }
-    
     if (document.getElementById('item_code')) {
         document.getElementById('item_code').addEventListener('input', () => {
             const suggestions = suggestionsCache.itemCodes.map(c => c.item_code);
@@ -33,21 +25,6 @@ function initializeAutocomplete() {
         document.getElementById('colour').addEventListener('input', () => {
             const suggestions = suggestionsCache.colours.map(c => c.colour);
             updateInputSuggestions('colour', suggestions);
-        });
-    }
-
-    // Products section fields
-    if (document.getElementById('item')) {
-        document.getElementById('item').addEventListener('input', () => {
-            const suggestions = suggestionsCache.items.map(i => i.item);
-            updateSelectSuggestions('item', suggestions);
-        });
-    }
-    
-    if (document.getElementById('size')) {
-        document.getElementById('size').addEventListener('input', () => {
-            const suggestions = suggestionsCache.sizes.map(s => s.size);
-            updateSelectSuggestions('size', suggestions);
         });
     }
 
@@ -76,7 +53,7 @@ function initializeAutocomplete() {
 
 // Load all master data suggestions
 function loadAutocompleteSuggestions() {
-    fetch('backend/get_autocomplete.php')
+    fetch('../backend/get_autocomplete.php')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -117,7 +94,7 @@ function updateInputSuggestions(fieldId, suggestions) {
 // Update suggestions for select/dropdown fields
 function updateSelectSuggestions(fieldId, suggestions) {
     const field = document.getElementById(fieldId);
-    if (!field || !field.value) return;
+    if (!field || field.tagName !== 'INPUT' || !field.value) return;
 
     const filteredSuggestions = suggestions.filter(item => {
         const itemText = typeof item === 'string' ? item : '';

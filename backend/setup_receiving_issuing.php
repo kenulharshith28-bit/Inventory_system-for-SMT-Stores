@@ -6,16 +6,22 @@
 include "db.php";
 
 try {
-    // Add shortage_ignored column to product_information if it doesn't exist
-    $checkColumnSQL = "SHOW COLUMNS FROM product_information LIKE 'shortage_ignored'";
-    $result = $conn->query($checkColumnSQL);
-    
-    if ($result->num_rows == 0) {
-        $alterSQL = "ALTER TABLE product_information ADD COLUMN shortage_ignored TINYINT DEFAULT 0";
-        if ($conn->query($alterSQL)) {
-            echo "Added shortage_ignored column to product_information<br>";
-        } else {
-            echo "Error adding column: " . $conn->error . "<br>";
+    // Add compatibility columns to product_information if they don't exist
+    $requiredColumns = [
+        'ignored' => "ALTER TABLE product_information ADD COLUMN ignored TINYINT(1) DEFAULT 0",
+        'shortage_ignored' => "ALTER TABLE product_information ADD COLUMN shortage_ignored TINYINT(1) DEFAULT 0"
+    ];
+
+    foreach ($requiredColumns as $columnName => $alterSQL) {
+        $checkColumnSQL = "SHOW COLUMNS FROM product_information LIKE '" . $columnName . "'";
+        $result = $conn->query($checkColumnSQL);
+
+        if ($result && $result->num_rows == 0) {
+            if ($conn->query($alterSQL)) {
+                echo "Added {$columnName} column to product_information<br>";
+            } else {
+                echo "Error adding {$columnName}: " . $conn->error . "<br>";
+            }
         }
     }
 

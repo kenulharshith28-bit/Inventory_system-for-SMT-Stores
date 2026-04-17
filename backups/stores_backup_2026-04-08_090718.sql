@@ -43,7 +43,7 @@ CREATE TABLE `header_infor` (
 
 LOCK TABLES `header_infor` WRITE;
 /*!40000 ALTER TABLE `header_infor` DISABLE KEYS */;
-INSERT INTO `header_infor` (`id`, `customer_name`, `work_order`, `mrn_no`, `cut_qty`, `location`, `work_date`, `status`, `created_at`) VALUES (1,'Polo','111111','11111',3100,'E/5/1','2026-04-06','issuing','2026-04-06 08:40:10');
+INSERT INTO `header_infor` (`id`, `customer_name`, `work_order`, `mrn_no`, `cut_qty`, `location`, `work_date`, `status`, `created_at`) VALUES (1,'Polo','111111','11111',3100,'E/5/1','2026-04-06','pending','2026-04-06 08:40:10');
 /*!40000 ALTER TABLE `header_infor` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -89,7 +89,7 @@ CREATE TABLE `master_data` (
   `value` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -98,7 +98,7 @@ CREATE TABLE `master_data` (
 
 LOCK TABLES `master_data` WRITE;
 /*!40000 ALTER TABLE `master_data` DISABLE KEYS */;
-INSERT INTO `master_data` (`id`, `type`, `value`, `created_at`) VALUES (3,'description','Urgent Order','2026-04-06 02:21:00'),(4,'description','Export Order','2026-04-06 02:21:00'),(5,'item','buttons','2026-04-06 08:36:20'),(6,'customer','Polo','2026-04-06 08:38:05'),(8,'size','XS','2026-04-07 02:50:13');
+INSERT INTO `master_data` (`id`, `type`, `value`, `created_at`) VALUES (3,'description','Urgent Order','2026-04-06 02:21:00'),(4,'description','Export Order','2026-04-06 02:21:00'),(5,'item','buttons','2026-04-06 08:36:20'),(6,'customer','Polo','2026-04-06 08:38:05'),(8,'size','XS','2026-04-07 02:50:13'),(9,'customer','L.L Bean','2026-04-08 06:51:51'),(10,'customer','Lacoste','2026-04-08 06:52:03');
 /*!40000 ALTER TABLE `master_data` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -154,7 +154,7 @@ CREATE TABLE `receivings` (
   PRIMARY KEY (`id`),
   KEY `idx_product_id_rec` (`product_id`),
   CONSTRAINT `receivings_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `product_information` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -163,7 +163,7 @@ CREATE TABLE `receivings` (
 
 LOCK TABLES `receivings` WRITE;
 /*!40000 ALTER TABLE `receivings` DISABLE KEYS */;
-INSERT INTO `receivings` (`id`, `product_id`, `qty`, `date`, `note`, `created_at`) VALUES (1,1,10,'2026-04-07','123','2026-04-07 08:08:15');
+INSERT INTO `receivings` (`id`, `product_id`, `qty`, `date`, `note`, `created_at`) VALUES (1,1,10,'2026-04-07','123','2026-04-07 08:08:15'),(2,1,91,'2026-04-07','1222','2026-04-07 14:07:52');
 /*!40000 ALTER TABLE `receivings` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -179,8 +179,9 @@ CREATE TABLE `users` (
   `username` varchar(50) DEFAULT NULL,
   `password` varchar(255) DEFAULT NULL,
   `role` varchar(20) DEFAULT 'user',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -189,7 +190,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` (`id`, `username`, `password`, `role`) VALUES (1,'admin','admin123','admin'),(2,'sahanmi','1234','user');
+INSERT INTO `users` (`id`, `username`, `password`, `role`, `created_at`) VALUES (1,'admin','$2y$10$l3yfEEd25Bif06FaHpVIK.mnpHwMFI14BhPYlfmD67bw1eNoDv3ie','admin','2026-04-08 05:15:48'),(2,'sahanmi','$2y$10$t9SOmKgEAhtgmiD5Kd7mdOVhWqa4Ds1RcvyDpMkHmjjJPHJwqpljq','user','2026-04-08 05:15:48');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -202,4 +203,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-07 19:32:25
+-- Dump completed on 2026-04-08 12:37:19

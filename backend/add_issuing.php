@@ -105,21 +105,15 @@ function updateWorkOrderStatus($conn, $workOrder) {
         $received = intval($totals['total_received']);
         $issued = intval($totals['total_issued']);
 
-        // CORRECT Status Logic:
-        // - created: No receiving or issuing
-        // - received: Has receiving, no issuing yet
-        // - pending: Has issuing but not all has been issued
-        // - done: All issued equals all received (balanced)
-        
         $newStatus = 'created';
         if ($received == 0 && $issued == 0) {
             $newStatus = 'created';
+        } elseif ($received === $mr && $issued === $mr) {
+            $newStatus = 'done';
         } elseif ($received > 0 && $issued == 0) {
             $newStatus = 'received';
-        } elseif ($issued > 0 && $issued < $received) {
+        } elseif ($received > 0 || $issued > 0) {
             $newStatus = 'pending';
-        } elseif ($issued > 0 && $issued >= $received) {
-            $newStatus = 'done';  // When issued >= received (balanced or shortage created)
         }
 
         $updateStmt = $conn->prepare("UPDATE header_infor SET status = ? WHERE work_order = ?");
